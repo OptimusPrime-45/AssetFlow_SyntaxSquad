@@ -18,25 +18,40 @@ export async function GET(request: Request) {
   const limitParam = searchParams.get('limit');
   const offsetParam = searchParams.get('offset');
 
-  const limit = limitParam ? parseInt(limitParam, 10) : 50;
-  const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+  const limit = Math.min(Math.max(1, parseInt(limitParam ?? '', 10) || 50), 100);
+  const offset = Math.max(0, parseInt(offsetParam ?? '', 10) || 0);
 
   const where: any = {
     isDeleted: false,
   };
 
-  // Scope checks
-  if (user.role === 'EMPLOYEE' && employee) {
-    where.OR = [
-      { actorEmployeeId: employee.id },
-      { actorUserId: user.id }
-    ];
-  } else if (user.role === 'DEPARTMENT_HEAD' && employee?.departmentId) {
+  // Scope, failing CLOSED.
+  //
+  // The old if/else-if chain keyed on the *employee record*, so a DEPARTMENT_HEAD
+  // with no departmentId — or an EMPLOYEE with no employee row — fell past every
+  // scoped branch into the unscoped tail and received the entire system-wide log.
+  // Each role now either gets its filter or is denied.
+  if (user.role === 'EMPLOYEE') {
+    if (!employee) {
+      return NextResponse.json(
+        { success: false, error: 'No employee profile is linked to this account' },
+        { status: 403 }
+      );
+    }
+    where.OR = [{ actorEmployeeId: employee.id }, { actorUserId: user.id }];
+  } else if (user.role === 'DEPARTMENT_HEAD') {
+    if (!employee?.departmentId) {
+      return NextResponse.json(
+        { success: false, error: 'You are not assigned to a department' },
+        { status: 403 }
+      );
+    }
     where.actorEmployee = {
       departmentId: employee.departmentId,
       ...(actorEmployeeId ? { id: actorEmployeeId } : {}),
     };
   } else if (actorEmployeeId) {
+    // ADMIN / ASSET_MANAGER — org-wide, optionally filtered to one actor.
     where.actorEmployeeId = actorEmployeeId;
   }
 
@@ -52,15 +67,32 @@ export async function GET(request: Request) {
     where.entityType = { equals: entityTypeParam, mode: 'insensitive' };
   }
 
+  // beforeData/afterData are free-form JSON snapshots of whatever a route chose to
+  // record — the natural place for a user-mutation to dump a whole row, password
+  // hash included. Along with the actor's IP and user-agent, they go to Admins
+  // only. Everyone else gets who/what/when.
+  const isAdmin = user.role === 'ADMIN';
+
   try {
     const logs = await prisma.activityLog.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        action: true,
+        entityType: true,
+        entityId: true,
+        description: true,
+        occurredAt: true,
+        beforeData: isAdmin,
+        afterData: isAdmin,
+        metadata: isAdmin,
+        ipAddress: isAdmin,
+        userAgent: isAdmin,
         actorEmployee: {
           select: { id: true, firstName: true, lastName: true, employeeCode: true }
         },
         actorUser: {
-          select: { id: true, email: true, role: true }
+          select: { id: true, role: true, ...(isAdmin ? { email: true } : {}) }
         }
       },
       orderBy: { occurredAt: 'desc' },

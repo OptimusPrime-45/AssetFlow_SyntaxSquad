@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const limitParam = searchParams.get('limit');
   const deptFilter = searchParams.get('departmentId');
 
-  const limit = limitParam ? parseInt(limitParam, 10) : 20;
+  const limit = Math.min(Math.max(1, parseInt(limitParam ?? '', 10) || 20), 100);
 
   let scope = 'GLOBAL';
   let targetDeptId: string | null = null;
@@ -28,6 +28,23 @@ export async function GET(request: Request) {
   } else if (deptFilter) {
     scope = 'DEPARTMENT';
     targetDeptId = deptFilter;
+  }
+
+  // Fail CLOSED. The scoped branches below are guarded by `scope === X && targetId`,
+  // so a null id used to fall through to the unfiltered org-wide query — handing an
+  // Employee with no profile, or a Dept Head with no department, the whole company's
+  // data while still labelling the response with their scope. Deny instead.
+  if (scope === 'EMPLOYEE' && !targetEmpId) {
+    return NextResponse.json(
+      { success: false, error: 'No employee profile is linked to this account' },
+      { status: 403 }
+    );
+  }
+  if (scope === 'DEPARTMENT' && !targetDeptId) {
+    return NextResponse.json(
+      { success: false, error: 'You are not assigned to a department' },
+      { status: 403 }
+    );
   }
 
   const where: any = {
@@ -52,8 +69,11 @@ export async function GET(request: Request) {
         actorEmployee: {
           select: { id: true, firstName: true, lastName: true, employeeCode: true }
         },
+        // No email: this feed reaches Dept Heads and Employees, and a name is
+        // enough to say who did what. Returning addresses turned the activity
+        // feed into a directory dump.
         actorUser: {
-          select: { id: true, email: true, role: true }
+          select: { id: true, role: true }
         }
       },
       orderBy: { occurredAt: 'desc' },

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { checkAuth } from '@/lib/auth/rbac';
-import { applyStatusChange } from '@/lib/assets/state-machine';
+import { applyStatusChange, ActiveAllocationError, IllegalTransitionError } from '@/lib/assets/state-machine';
 import { z } from 'zod';
 
 interface RouteContext {
@@ -94,11 +94,8 @@ export async function POST(request: Request, { params }: RouteContext) {
   } catch (error: any) {
     console.error('Approve maintenance error:', error);
     // If it's an illegal state transition error from the state machine
-    if (error.name === 'IllegalTransitionError') {
-      return NextResponse.json(
-        { success: false, error: `Asset state transition failed: ${error.message}` },
-        { status: 409 }
-      );
+    if (error instanceof ActiveAllocationError || error instanceof IllegalTransitionError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 409 });
     }
     return NextResponse.json(
       { success: false, error: 'An unexpected error occurred while approving maintenance request' },

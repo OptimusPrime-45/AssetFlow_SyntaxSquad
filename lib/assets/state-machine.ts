@@ -110,6 +110,56 @@ type StatusChange = {
     note?: string | null;
 };
 
+type ConditionChange = {
+    assetId: string;
+    condition: AssetCondition;
+    reason: AssetStatusChangeReason;
+    changedById?: string | null;
+    note?: string | null;
+};
+
+/**
+ * Changes an asset's condition without moving its status, still recording the
+ * change in AssetStatusHistory.
+ *
+ * Needed because applyStatusChange() rejects a no-op transition (X -> X is never
+ * in the table), but an audit that finds a laptop DAMAGED-but-present must record
+ * the damage without pretending the asset moved anywhere. Writing the condition
+ * with a bare asset.update() would leave no trail at all.
+ */
+export async function applyConditionChange(tx: Tx, change: ConditionChange) {
+    const { assetId, condition, reason, changedById = null, note = null } = change;
+
+    const asset = await tx.asset.findUnique({
+        where: { id: assetId },
+        select: { status: true, condition: true, isDeleted: true },
+    });
+
+    if (!asset || asset.isDeleted) {
+        throw new Error(`Asset ${assetId} not found`);
+    }
+
+    const updated = await tx.asset.update({
+        where: { id: assetId },
+        data: { condition },
+    });
+
+    await tx.assetStatusHistory.create({
+        data: {
+            assetId,
+            fromStatus: asset.status,
+            toStatus: asset.status, // unchanged — this is a condition-only event
+            fromCondition: asset.condition,
+            toCondition: condition,
+            reason,
+            note,
+            changedById,
+        },
+    });
+
+    return updated;
+}
+
 /**
  * Moves an asset to a new status, enforcing the transition table and recording
  * the move in AssetStatusHistory. Throws IllegalTransitionError if the move
