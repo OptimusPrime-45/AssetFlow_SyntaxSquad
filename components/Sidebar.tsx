@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/context/AuthContext";
 
 interface SidebarProps {
-  activePage: "dashboard" | "assets" | "workflows" | "treasury" | "reports" | "settings" | "bookings" | "audits" | "notifications" | "profile";
+  activePage: string;
 }
 
 export default function Sidebar({ activePage }: SidebarProps) {
@@ -41,7 +41,7 @@ export default function Sidebar({ activePage }: SidebarProps) {
       label: "§ 03 · Bookings",
       icon: "calendar_today",
       href: "/bookings",
-      roles: ["ASSET_MANAGER", "DEPARTMENT_HEAD"],
+      roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
     },
     // Employee My Bookings
     {
@@ -105,10 +105,25 @@ export default function Sidebar({ activePage }: SidebarProps) {
   ];
 
   // Filter links by current user's role
-  const links = allLinks.filter((link) => {
+  let links = allLinks.filter((link) => {
     if (!role) return false;
     return link.roles.includes(role);
   });
+
+  // Customize sidebar strictly for DEPARTMENT_HEAD to use tab routing on dashboard
+  if (role === "DEPARTMENT_HEAD") {
+    links = [
+      { id: "dashboard", label: "§ 01 · Dashboard", icon: "dashboard", href: "/dashboard", roles: ["DEPARTMENT_HEAD"] },
+      { id: "assets", label: "§ 02 · Dept Assets", icon: "account_balance_wallet", href: "/dashboard?tab=assets", roles: ["DEPARTMENT_HEAD"] },
+      { id: "employees", label: "§ 03 · Employees", icon: "badge", href: "/dashboard?tab=employees", roles: ["DEPARTMENT_HEAD"] },
+      { id: "transfers", label: "§ 04 · Transfers", icon: "sync_alt", href: "/dashboard?tab=transfers", roles: ["DEPARTMENT_HEAD"] },
+      { id: "bookings", label: "§ 05 · Bookings", icon: "calendar_today", href: "/dashboard?tab=bookings", roles: ["DEPARTMENT_HEAD"] },
+      { id: "maintenance", label: "§ 06 · Maintenance", icon: "build", href: "/dashboard?tab=maintenance", roles: ["DEPARTMENT_HEAD"] },
+      { id: "reports", label: "§ 07 · Reports", icon: "analytics", href: "/dashboard?tab=reports", roles: ["DEPARTMENT_HEAD"] },
+      { id: "notifications", label: "§ 08 · Notifications", icon: "notifications", href: "/dashboard?tab=notifications", roles: ["DEPARTMENT_HEAD"] },
+      { id: "profile", label: "§ 09 · Profile", icon: "person", href: "/dashboard?tab=profile", roles: ["DEPARTMENT_HEAD"] },
+    ];
+  }
 
   return (
     <aside className="h-screen w-64 fixed left-0 top-0 bg-surface-container-low border-r border-border-hairline flex flex-col py-gutter space-y-unit z-50">
