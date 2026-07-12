@@ -1341,6 +1341,15 @@ export default function Dashboard() {
   const [custody, setCustody] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Employee portal panels
+  const [myBookings, setMyBookings] = useState<Booking[]>([]);
+  const [myMaintenance, setMyMaintenance] = useState<MaintenanceRequest[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  // Admin / Asset Manager return watchlists
+  const [overdueReturns, setOverdueReturns] = useState<any[]>([]);
+  const [upcomingReturns, setUpcomingReturns] = useState<any[]>([]);
+
   // Scoped helper counts
   const [pendingReturnsCount, setPendingReturnsCount] = useState(0);
   const [upcomingBookingsCount, setUpcomingBookingsCount] = useState(0);
@@ -1374,58 +1383,160 @@ export default function Dashboard() {
   const [formTransferTarget, setFormTransferTarget] = useState("");
   const [formTransferReason, setFormTransferReason] = useState("");
 
+  // Returns the parsed body only for a successful call, so a panel whose endpoint
+  // fails is left empty instead of taking the whole dashboard down with it.
+  const getJson = async (url: string) => {
+    const res = await fetch(url);
+    if (res.status !== 200) return null;
+    const data = await res.json();
+    return data.success ? data : null;
+  };
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const kpiRes = await fetch("/api/dashboard/kpis");
-      if (kpiRes.status === 200) {
-        const kpiData = await kpiRes.json();
-        if (kpiData.success) {
-          setKpis(kpiData.kpis);
-        }
-      }
 
-      const actRes = await fetch("/api/dashboard/recent-activity?limit=10");
-      if (actRes.status === 200) {
-        const actData = await actRes.json();
-        if (actData.success) {
-          setActivities(actData.activities);
-        }
-      }
+      const employeeId = user?.employee?.id;
+      const isEmployee = role === "EMPLOYEE";
+      const isManager = role === "ADMIN" || role === "ASSET_MANAGER";
 
-      if (role === "EMPLOYEE") {
-        const allocRes = await fetch("/api/allocations/my");
-        if (allocRes.status === 200) {
-          const allocData = await allocRes.json();
-          if (allocData.success) {
-            setCustody(allocData.allocations);
-          }
-        }
-      }
+      // No panel depends on another, so they all go out at once. Awaiting them in
+      // turn made the dashboard wait out one round trip per panel.
+      const [kpi, act, custodyData, bookings, maint, notifs, bookable, emps, depts, overdue, upcoming] =
+        await Promise.all([
+          getJson("/api/dashboard/kpis"),
+          getJson("/api/dashboard/recent-activity?limit=10"),
+          isEmployee ? getJson("/api/allocations/my") : null,
+          isEmployee ? getJson("/api/bookings/my?limit=10") : null,
+          isEmployee && employeeId
+            ? getJson(`/api/maintenance?requestedById=${employeeId}&limit=100`)
+            : null,
+          isEmployee ? getJson("/api/notifications") : null,
+          // Modal dropdowns.
+          isEmployee ? getJson("/api/assets/bookable") : null,
+          isEmployee ? getJson("/api/employees") : null,
+          isEmployee ? getJson("/api/departments") : null,
+          isManager ? getJson("/api/dashboard/overdue-returns?limit=10") : null,
+          isManager ? getJson("/api/dashboard/upcoming-returns?limit=10&days=7") : null,
+        ]);
 
-      // Fetch Overdue and Upcoming returns if Admin / Asset Manager
-      if (role === "ADMIN" || role === "ASSET_MANAGER") {
-        const overdueRes = await fetch("/api/dashboard/overdue-returns?limit=10");
-        if (overdueRes.status === 200) {
-          const overdueData = await overdueRes.json();
-          if (overdueData.success) {
-            setOverdueReturns(overdueData.overdueAllocations || []);
-          }
-        }
-
-        const upcomingRes = await fetch("/api/dashboard/upcoming-returns?limit=10&days=7");
-        if (upcomingRes.status === 200) {
-          const upcomingData = await upcomingRes.json();
-          if (upcomingData.success) {
-            setUpcomingReturns(upcomingData.upcomingAllocations || []);
-          }
-        }
-      }
+      if (kpi) setKpis(kpi.kpis);
+      if (act) setActivities(act.activities);
+      if (custodyData) setCustody(custodyData.allocations);
+      if (bookings) setMyBookings(bookings.bookings);
+      if (maint) setMyMaintenance(maint.requests);
+      if (notifs) setNotifications(notifs.notifications);
+      if (bookable) setBookableAssets(bookable.assets);
+      if (emps) setEmployees(emps.employees);
+      if (depts) setDepartments(depts.departments);
+      if (overdue) setOverdueReturns(overdue.overdueAllocations || []);
+      if (upcoming) setUpcomingReturns(upcoming.upcomingAllocations || []);
     } catch (e) {
       console.error("Failed to load dashboard data", e);
     } finally {
       setLoading(false);
     }
+  };
+
+  const resetForm = () => {
+    setModalError(null);
+    setFormAssetId("");
+    setFormAllocId("");
+    setFormTitle("");
+    setFormDesc("");
+    setFormPriority("MEDIUM");
+    setFormPurpose("EQUIPMENT");
+    setFormAudience("INDIVIDUAL");
+    setFormStartDate("");
+    setFormStartTime("09:00");
+    setFormEndDate("");
+    setFormEndTime("10:00");
+    setFormNotes("");
+    setFormReturnCondition("GOOD");
+    setFormReturnNotes("");
+    setFormTransferType("employee");
+    setFormTransferTarget("");
+    setFormTransferReason("");
+  };
+
+  // Every quick-action modal posts, then closes and refetches on success; only the
+  // endpoint and payload differ.
+  const submitModal = async (
+    url: string,
+    payload: Record<string, any>,
+    okStatus = 201
+  ) => {
+    setSubmitting(true);
+    setModalError(null);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.status === okStatus && data.success) {
+        setActiveModal(null);
+        resetForm();
+        fetchDashboardData();
+      } else {
+        setModalError(data.error || "Request failed");
+      }
+    } catch (e) {
+      setModalError("A network error occurred.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRaiseMaintenance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitModal("/api/maintenance", {
+      assetId: formAssetId,
+      issueTitle: formTitle,
+      issueDescription: formDesc,
+      priority: formPriority,
+    });
+  };
+
+  const handleBookResource = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const startAt = new Date(`${formStartDate}T${formStartTime}:00`);
+    const endAt = new Date(`${formEndDate}T${formEndTime}:00`);
+
+    if (endAt <= startAt) {
+      setModalError("End time must be after start time");
+      return;
+    }
+
+    await submitModal("/api/bookings", {
+      assetId: formAssetId,
+      title: formTitle,
+      purpose: formPurpose,
+      audience: formAudience,
+      startAt: startAt.toISOString(),
+      endAt: endAt.toISOString(),
+      notes: formNotes || null,
+    });
+  };
+
+  const handleRequestReturn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitModal("/api/returns", {
+      assetAllocationId: formAllocId,
+      conditionOnReturn: formReturnCondition,
+      conditionNotes: formReturnNotes || null,
+    });
+  };
+
+  const handleRequestTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitModal("/api/transfers", {
+      assetId: formAssetId,
+      toEmployeeId: formTransferType === "employee" ? formTransferTarget : null,
+      toDepartmentId: formTransferType === "department" ? formTransferTarget : null,
+      reason: formTransferReason,
+    });
   };
 
   useEffect(() => {
@@ -2136,9 +2247,11 @@ export default function Dashboard() {
                 <div className="font-label-mono text-label-mono text-secondary uppercase tracking-widest mb-4 text-xs font-semibold">
                   § 02 · Quick Actions
                 </div>
+                {/* EMPLOYEE returns the portal above, so this branch is only ever
+                    reached by Admin / Asset Manager. */}
                 <div className="flex flex-col gap-3">
                   <Link href="/assets">
-                    <button className="group flex items-center justify-between w-full bg-primary text-on-primary px-6 py-5 rounded-none transition-all hover:bg-opacity-90 cursor-pointer text-xs font-label-mono uppercase tracking-[0.15em]">
+                    <button className="group flex items-center justify-between w-full bg-primary text-on-primary px-6 py-5 rounded-none transition-all hover:bg-opacity-90 cursor-pointer text-xs font-label-mono uppercase tracking-[0.15em] text-white">
                       Provision New Asset
                       <span className="material-symbols-outlined">add_circle</span>
                     </button>
@@ -2151,75 +2264,6 @@ export default function Dashboard() {
                   </Link>
                 </div>
               </div>
-                  {role === "EMPLOYEE" ? (
-                    <>
-                      <Link href="/bookings">
-                        <button className="group flex items-center justify-between w-full bg-primary text-on-primary px-6 py-5 rounded-none transition-all hover:bg-opacity-90 cursor-pointer text-xs font-label-mono uppercase tracking-[0.15em] text-white">
-                          Reserve Shared Resource
-                          <span className="material-symbols-outlined">calendar_today</span>
-                        </button>
-                      </Link>
-                      <Link href="/workflows">
-                        <button className="group flex items-center justify-between w-full border border-border-hairline bg-surface text-on-surface px-6 py-5 rounded-none transition-all hover:border-primary cursor-pointer text-xs font-label-mono uppercase tracking-[0.15em]">
-                          File Maintenance Ticket
-                          <span className="material-symbols-outlined">build</span>
-                        </button>
-                      </Link>
-                    </>
-                  ) : (
-                    <>
-                      <Link href="/assets">
-                        <button className="group flex items-center justify-between w-full bg-primary text-on-primary px-6 py-5 rounded-none transition-all hover:bg-opacity-90 cursor-pointer text-xs font-label-mono uppercase tracking-[0.15em] text-white">
-                          Provision New Asset
-                          <span className="material-symbols-outlined">add_circle</span>
-                        </button>
-                      </Link>
-                      <Link href="/workflows">
-                        <button className="group flex items-center justify-between w-full border border-border-hairline bg-surface text-on-surface px-6 py-5 rounded-none transition-all hover:border-primary cursor-pointer text-xs font-label-mono uppercase tracking-[0.15em]">
-                          Verify Custody &amp; Transfers
-                          <span className="material-symbols-outlined">sync_alt</span>
-                        </button>
-                      </Link>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Custody Listing Widget */}
-              {role === "EMPLOYEE" && (
-                <div className="p-gutter border border-border-hairline bg-surface">
-                  <div className="font-label-mono text-[10px] text-secondary uppercase tracking-widest mb-4 font-semibold">
-                    Items In My Custody
-                  </div>
-                  {custody.length === 0 ? (
-                    <p className="text-secondary text-xs italic">No assets currently allocated to you.</p>
-                  ) : (
-                    <div className="space-y-4 max-h-64 overflow-y-auto custom-scrollbar pr-2">
-                      {custody.map((alloc) => {
-                        const isOverdue = alloc.expectedReturnDate && new Date(alloc.expectedReturnDate) < new Date();
-                        return (
-                          <div key={alloc.id} className="text-xs p-3 border border-border-hairline">
-                            <div className="flex justify-between items-start mb-2">
-                              <span className="font-bold text-on-surface leading-tight">{alloc.asset.name}</span>
-                              <span className="font-label-mono text-[10px] uppercase text-secondary bg-surface-container-high px-1.5 py-0.5">{alloc.asset.assetTag}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-[10px] text-secondary font-label-mono">
-                              <span>Assigned: {new Date(alloc.allocatedAt).toLocaleDateString()}</span>
-                              {alloc.expectedReturnDate ? (
-                                <span className={isOverdue ? "text-error font-bold" : ""}>
-                                  Due: {new Date(alloc.expectedReturnDate).toLocaleDateString()}
-                                </span>
-                              ) : (
-                                <span>No Return Date</span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* Overdue & Upcoming Returns Widget (Admin/Asset Manager only) */}
               {(role === "ADMIN" || role === "ASSET_MANAGER") && (
@@ -2331,8 +2375,6 @@ export default function Dashboard() {
         {/* Footer */}
         <footer className="mt-section-margin pt-12 border-t border-border-hairline flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-12">
           <div className="space-y-1">
-            <div className="font-section-number text-[18px] text-on-surface font-semibold">AssetFlow</div>
-            <p className="font-label-mono text-[11px] text-secondary uppercase tracking-widest">
             <div className="font-section-number text-[18px] text-on-surface font-semibold">
               AssetFlow
             </div>
