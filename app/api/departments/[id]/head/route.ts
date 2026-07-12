@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { checkAuth } from '@/lib/auth/rbac';
 import { syncRolesForNewHead } from '@/lib/org/head-sync';
 import { z } from 'zod';
+import { sendEmail } from '@/lib/email/resend';
 
 const updateHeadSchema = z.object({
   headEmployeeId: z.string().nullable(),
@@ -77,6 +78,25 @@ export async function PATCH(
 
       return dept;
     });
+
+    if (headEmployeeId) {
+      const newHead = await prisma.employee.findUnique({
+        where: { id: headEmployeeId },
+        include: { user: { select: { email: true } } }
+      });
+      if (newHead?.user?.email) {
+        await sendEmail({
+          to: newHead.user.email,
+          subject: `You have been assigned as Head of ${updatedDept.name}`,
+          html: `
+            <h2>Department Head Assignment</h2>
+            <p>Hi ${newHead.firstName},</p>
+            <p>You have been assigned as the Department Head of the department <strong>${updatedDept.name} (${updatedDept.code})</strong>.</p>
+            <p>Your system permissions have been updated accordingly.</p>
+          `
+        });
+      }
+    }
 
     return NextResponse.json({ success: true, department: updatedDept });
   } catch (error: any) {

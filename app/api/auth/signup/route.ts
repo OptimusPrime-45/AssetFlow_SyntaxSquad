@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth/password';
 import { withEmployeeCode } from '@/lib/employee-code';
 import { z } from 'zod';
+import { sendEmail } from '@/lib/email/resend';
 
 // No employeeCode here on purpose: it is issued by the server, never chosen by
 // the person signing up. Accepting it would let anyone claim an arbitrary code
@@ -101,6 +102,19 @@ export async function POST(request: Request) {
         return { user: newUser, employee: newEmployee };
       })
     );
+
+    // Send welcome email
+    await sendEmail({
+      to: email,
+      subject: 'Welcome to AssetFlow!',
+      html: `
+        <h2>Welcome to AssetFlow</h2>
+        <p>Hi ${firstName},</p>
+        <p>Your registration was successful. You can now log in to the portal using your credentials.</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Employee Code:</strong> ${employee.employeeCode}</p>
+      `
+    });
 
     return NextResponse.json(
       {
