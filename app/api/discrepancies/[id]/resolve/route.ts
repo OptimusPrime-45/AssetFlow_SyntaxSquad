@@ -70,48 +70,21 @@ export async function POST(request: Request, { params }: RouteContext) {
         },
       });
 
-      // 2. Synchronize asset values if auditResult exists
-      if (discrepancy.auditResult) {
-        const result = discrepancy.auditResult;
-        const asset = discrepancy.asset;
-
-        const obsLocation = result.observedLocation;
-        const obsCondition = result.observedCondition;
-        const obsStatus = result.observedStatus;
-
-        // If finding was MISSING, we might transition asset to LOST status
-        let targetStatus = obsStatus || asset.status;
-        if (result.finding === 'MISSING') {
-          targetStatus = 'LOST';
-        }
-
-        if (targetStatus && targetStatus !== asset.status) {
-          await applyStatusChange(tx, {
-            assetId: discrepancy.assetId,
-            to: targetStatus,
-            reason: 'AUDIT_VERIFICATION',
-            changedById: auth.employee!.id,
-            condition: obsCondition || undefined,
-            note: resolutionNote || 'Synchronized status on resolving audit discrepancy',
-          });
-
-          // Sync location if provided
-          await tx.asset.update({
-            where: { id: discrepancy.assetId },
-            data: {
-              location: obsLocation !== undefined && obsLocation !== null ? obsLocation : asset.location,
-            },
-          });
-        } else {
-          // If status didn't change, just update location and condition directly
-          await tx.asset.update({
-            where: { id: discrepancy.assetId },
-            data: {
-              condition: obsCondition !== undefined && obsCondition !== null ? obsCondition : asset.condition,
-              location: obsLocation !== undefined && obsLocation !== null ? obsLocation : asset.location,
-            },
-          });
-        }
+      // 2. Correct the asset's *location* if the auditor found it somewhere else.
+      //
+      // Deliberately nothing else. This route used to take the auditor's free-form
+      // observedStatus and apply it as the asset's next status — any of the seven
+      // values, DISPOSED included — which let an auditor choose an asset's fate and
+      // an admin rubber-stamp it by clicking "resolve". Status and condition changes
+      // now belong to cycle closure (POST /audit-cycles/:id/close), which applies
+      // them once, atomically, under the state machine. Resolving a discrepancy is
+      // the human saying "dealt with", not a second path into the asset record.
+      const observedLocation = discrepancy.auditResult?.observedLocation;
+      if (observedLocation && observedLocation !== discrepancy.asset.location) {
+        await tx.asset.update({
+          where: { id: discrepancy.assetId },
+          data: { location: observedLocation },
+        });
       }
 
       return updated;

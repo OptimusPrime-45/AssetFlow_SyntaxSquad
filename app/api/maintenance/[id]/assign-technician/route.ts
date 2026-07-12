@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { checkAuth } from '@/lib/auth/rbac';
-import { applyStatusChange } from '@/lib/assets/state-machine';
+import { applyStatusChange, ActiveAllocationError, IllegalTransitionError } from '@/lib/assets/state-machine';
 import { z } from 'zod';
 
 interface RouteContext {
@@ -36,11 +36,21 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ success: false, error: 'Maintenance request not found' }, { status: 404 });
     }
 
-    const allowedStatuses = ['PENDING', 'APPROVED', 'TECHNICIAN_ASSIGNED', 'IN_PROGRESS'];
+    // Approval is a gate, not a formality. PENDING used to be accepted here, and
+    // the route would silently stamp approvedBy/approvedAt and push the asset to
+    // UNDER_MAINTENANCE — an approval with no APPROVED event in the history, so the
+    // audit trail showed a decision nobody made. Approve it first.
+    const allowedStatuses = ['APPROVED', 'TECHNICIAN_ASSIGNED', 'IN_PROGRESS'];
     if (!allowedStatuses.includes(maintenanceRequest.status)) {
       return NextResponse.json(
-        { success: false, error: `Cannot assign technician to a request in ${maintenanceRequest.status} status` },
-        { status: 400 }
+        {
+          success: false,
+          error:
+            maintenanceRequest.status === 'PENDING'
+              ? 'Approve this request before assigning a technician.'
+              : `Cannot assign a technician to a request in ${maintenanceRequest.status} status`,
+        },
+        { status: 409 }
       );
     }
 
@@ -66,8 +76,11 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     const updatedRequest = await prisma.$transaction(async (tx) => {
-      const isPending = maintenanceRequest.status === 'PENDING';
-      const targetRequestStatus = isPending ? 'TECHNICIAN_ASSIGNED' : maintenanceRequest.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'TECHNICIAN_ASSIGNED';
+      // Reassigning mid-repair keeps the request IN_PROGRESS; otherwise the
+      // assignment moves it to TECHNICIAN_ASSIGNED. The asset is already
+      // UNDER_MAINTENANCE (approval put it there), so no status change here.
+      const targetRequestStatus =
+        maintenanceRequest.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'TECHNICIAN_ASSIGNED';
 
       // 1. Update status and technician
       const updated = await tx.maintenanceRequest.update({
@@ -76,29 +89,10 @@ export async function POST(request: Request, { params }: RouteContext) {
           assignedTechnicianId: technicianId,
           technicianAssignedAt: new Date(),
           status: targetRequestStatus,
-          // If was pending, we auto-approve it
-          ...(isPending
-            ? {
-                approvedById: auth.employee!.id,
-                approvedAt: new Date(),
-                approvalNote: 'Approved on technician assignment',
-              }
-            : {}),
         },
       });
 
-      // 2. If it was pending, transition the asset status to UNDER_MAINTENANCE
-      if (isPending) {
-        await applyStatusChange(tx, {
-          assetId: maintenanceRequest.assetId,
-          to: 'UNDER_MAINTENANCE',
-          reason: 'MAINTENANCE_APPROVAL',
-          changedById: auth.employee!.id,
-          note: 'Approved on technician assignment',
-        });
-      }
-
-      // 3. Log history
+      // 2. Log history
       const techName = `${technician.firstName} ${technician.lastName}`;
       await tx.maintenanceHistory.create({
         data: {
@@ -117,11 +111,8 @@ export async function POST(request: Request, { params }: RouteContext) {
     return NextResponse.json({ success: true, request: updatedRequest });
   } catch (error: any) {
     console.error('Assign technician error:', error);
-    if (error.name === 'IllegalTransitionError') {
-      return NextResponse.json(
-        { success: false, error: `Asset state transition failed: ${error.message}` },
-        { status: 409 }
-      );
+    if (error instanceof ActiveAllocationError || error instanceof IllegalTransitionError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 409 });
     }
     return NextResponse.json(
       { success: false, error: 'An unexpected error occurred while assigning technician' },

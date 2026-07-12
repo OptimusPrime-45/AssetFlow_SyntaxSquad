@@ -17,8 +17,23 @@ export async function GET(
   const limitParam = searchParams.get('limit');
   const offsetParam = searchParams.get('offset');
 
-  const limit = limitParam ? parseInt(limitParam, 10) : 50;
-  const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+  const limit = Math.min(Math.max(1, parseInt(limitParam ?? '', 10) || 50), 100);
+  const offset = Math.max(0, parseInt(offsetParam ?? '', 10) || 0);
+
+  // A Dept Head with no department, or an Employee with no profile, would slip
+  // past the scoping below and read the entity's full log. Deny first.
+  if (user.role === 'DEPARTMENT_HEAD' && !employee?.departmentId) {
+    return NextResponse.json(
+      { success: false, error: 'You are not assigned to a department' },
+      { status: 403 }
+    );
+  }
+  if (user.role === 'EMPLOYEE' && !employee) {
+    return NextResponse.json(
+      { success: false, error: 'No employee profile is linked to this account' },
+      { status: 403 }
+    );
+  }
 
   // Authorization and scoping check for Department Heads
   if (user.role === 'DEPARTMENT_HEAD' && employee?.departmentId) {
@@ -54,15 +69,30 @@ export async function GET(
     ];
   }
 
+  // Same rule as the main log: raw before/after snapshots and actor IPs are
+  // Admin-only. See app/api/activity-logs/route.ts.
+  const isAdmin = user.role === 'ADMIN';
+
   try {
     const logs = await prisma.activityLog.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        action: true,
+        entityType: true,
+        entityId: true,
+        description: true,
+        occurredAt: true,
+        beforeData: isAdmin,
+        afterData: isAdmin,
+        metadata: isAdmin,
+        ipAddress: isAdmin,
+        userAgent: isAdmin,
         actorEmployee: {
           select: { id: true, firstName: true, lastName: true, employeeCode: true }
         },
         actorUser: {
-          select: { id: true, email: true, role: true }
+          select: { id: true, role: true, ...(isAdmin ? { email: true } : {}) }
         }
       },
       orderBy: { occurredAt: 'desc' },

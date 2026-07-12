@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { checkAuth } from '@/lib/auth/rbac';
+import { HELD_ALLOCATION_STATUSES } from '@/lib/allocations/statuses';
 
 export async function GET(request: Request) {
   const auth = await checkAuth(['ADMIN', 'ASSET_MANAGER', 'DEPARTMENT_HEAD', 'EMPLOYEE']);
@@ -30,6 +31,23 @@ export async function GET(request: Request) {
     targetDeptId = deptFilter;
   }
 
+  // Fail CLOSED. The scoped branches below are guarded by `scope === X && targetId`,
+  // so a null id used to fall straight through to the org-wide branch — handing an
+  // Employee with no profile, or a Dept Head with no department, the whole company's
+  // numbers while still labelling the response "EMPLOYEE". Deny instead.
+  if (scope === 'EMPLOYEE' && !targetEmpId) {
+    return NextResponse.json(
+      { success: false, error: 'No employee profile is linked to this account' },
+      { status: 403 }
+    );
+  }
+  if (scope === 'DEPARTMENT' && !targetDeptId) {
+    return NextResponse.json(
+      { success: false, error: 'You are not assigned to a department' },
+      { status: 403 }
+    );
+  }
+
   const now = new Date();
   const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
@@ -48,7 +66,7 @@ export async function GET(request: Request) {
     if (scope === 'EMPLOYEE' && targetEmpId) {
       // Employee: their allocated assets, their upcoming/overdue returns, their active bookings
       kpis.totalAssets = await prisma.assetAllocation.count({
-        where: { allocatedToEmployeeId: targetEmpId, status: 'ACTIVE', isCurrent: true, isDeleted: false }
+        where: { allocatedToEmployeeId: targetEmpId, status: { in: HELD_ALLOCATION_STATUSES }, isCurrent: true, isDeleted: false }
       });
       kpis.allocatedAssets = kpis.totalAssets;
       kpis.availableAssets = 0;
@@ -58,7 +76,7 @@ export async function GET(request: Request) {
       kpis.overdueReturns = await prisma.assetAllocation.count({
         where: {
           allocatedToEmployeeId: targetEmpId,
-          status: 'ACTIVE',
+          status: { in: HELD_ALLOCATION_STATUSES },
           isCurrent: true,
           expectedReturnDate: { lt: now },
           isDeleted: false
@@ -67,7 +85,7 @@ export async function GET(request: Request) {
       kpis.upcomingReturns = await prisma.assetAllocation.count({
         where: {
           allocatedToEmployeeId: targetEmpId,
-          status: 'ACTIVE',
+          status: { in: HELD_ALLOCATION_STATUSES },
           isCurrent: true,
           expectedReturnDate: { gte: now, lte: nextWeek },
           isDeleted: false
@@ -100,7 +118,7 @@ export async function GET(request: Request) {
             { allocatedToDepartmentId: targetDeptId },
             { allocatedToEmployee: { departmentId: targetDeptId } }
           ],
-          status: 'ACTIVE',
+          status: { in: HELD_ALLOCATION_STATUSES },
           isCurrent: true,
           expectedReturnDate: { lt: now },
           isDeleted: false
@@ -112,7 +130,7 @@ export async function GET(request: Request) {
             { allocatedToDepartmentId: targetDeptId },
             { allocatedToEmployee: { departmentId: targetDeptId } }
           ],
-          status: 'ACTIVE',
+          status: { in: HELD_ALLOCATION_STATUSES },
           isCurrent: true,
           expectedReturnDate: { gte: now, lte: nextWeek },
           isDeleted: false
@@ -155,10 +173,10 @@ export async function GET(request: Request) {
         where: { status: 'UNDER_MAINTENANCE', isDeleted: false }
       });
       kpis.overdueReturns = await prisma.assetAllocation.count({
-        where: { status: 'ACTIVE', isCurrent: true, expectedReturnDate: { lt: now }, isDeleted: false }
+        where: { status: { in: HELD_ALLOCATION_STATUSES }, isCurrent: true, expectedReturnDate: { lt: now }, isDeleted: false }
       });
       kpis.upcomingReturns = await prisma.assetAllocation.count({
-        where: { status: 'ACTIVE', isCurrent: true, expectedReturnDate: { gte: now, lte: nextWeek }, isDeleted: false }
+        where: { status: { in: HELD_ALLOCATION_STATUSES }, isCurrent: true, expectedReturnDate: { gte: now, lte: nextWeek }, isDeleted: false }
       });
       kpis.activeBookings = await prisma.resourceBooking.count({
         where: { status: { in: ['PENDING', 'UPCOMING', 'ONGOING'] }, isDeleted: false }

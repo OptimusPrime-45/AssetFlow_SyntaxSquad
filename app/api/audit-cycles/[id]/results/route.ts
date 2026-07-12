@@ -106,17 +106,31 @@ export async function POST(request: Request, { params }: RouteContext) {
       notes,
     } = result.data;
 
-    // Verify asset
+    // The asset must fall inside the cycle's declared scope. Without this an
+    // auditor on a Finance cycle could file findings — and auto-raise CRITICAL
+    // discrepancies — against any asset in the company.
     const asset = await prisma.asset.findFirst({
-      where: { id: assetId, isDeleted: false },
+      where: {
+        id: assetId,
+        isDeleted: false,
+        ...(cycle.departmentId ? { departmentId: cycle.departmentId } : {}),
+        ...(cycle.locationFilter
+          ? { location: { contains: cycle.locationFilter, mode: 'insensitive' as const } }
+          : {}),
+      },
     });
 
     if (!asset) {
-      return NextResponse.json({ success: false, error: 'Asset not found' }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: 'Asset not found, or it is outside the scope of this audit cycle' },
+        { status: 404 }
+      );
     }
 
-    // Verify user is assigned auditor or admin/manager
-    const isAdminOrManager = auth.user.role === 'ADMIN' || auth.user.role === 'ASSET_MANAGER';
+    // Only an assigned auditor may file a finding — including Admins and Asset
+    // Managers. Exempting them wrote their id into auditorId as though they had
+    // physically inspected the asset, forging the auditor identity on the record.
+    // An Admin who wants to audit can assign themselves to the cycle first.
     const assignment = await prisma.auditAssignment.findUnique({
       where: {
         cycleId_auditorId: {
@@ -126,9 +140,12 @@ export async function POST(request: Request, { params }: RouteContext) {
       },
     });
 
-    if (!isAdminOrManager && (!assignment || assignment.isDeleted)) {
+    if (!assignment || assignment.isDeleted) {
       return NextResponse.json(
-        { success: false, error: 'Forbidden: You are not assigned as an auditor for this cycle' },
+        {
+          success: false,
+          error: 'You are not assigned as an auditor for this cycle. Assign yourself before recording findings.',
+        },
         { status: 403 }
       );
     }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { checkAuth } from '@/lib/auth/rbac';
+import { HELD_ALLOCATION_STATUSES } from '@/lib/allocations/statuses';
 
 export async function GET(request: Request) {
   const auth = await checkAuth(['ADMIN', 'ASSET_MANAGER', 'DEPARTMENT_HEAD', 'EMPLOYEE']);
@@ -14,8 +15,8 @@ export async function GET(request: Request) {
   const offsetParam = searchParams.get('offset');
   const deptFilter = searchParams.get('departmentId');
 
-  const limit = limitParam ? parseInt(limitParam, 10) : 10;
-  const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+  const limit = Math.min(Math.max(1, parseInt(limitParam ?? '', 10) || 10), 100);
+  const offset = Math.max(0, parseInt(offsetParam ?? '', 10) || 0);
 
   let scope = 'GLOBAL';
   let targetDeptId: string | null = null;
@@ -32,9 +33,26 @@ export async function GET(request: Request) {
     targetDeptId = deptFilter;
   }
 
+  // Fail CLOSED. The scoped branches below are guarded by `scope === X && targetId`,
+  // so a null id used to fall through to the unfiltered org-wide query — handing an
+  // Employee with no profile, or a Dept Head with no department, the whole company's
+  // data while still labelling the response with their scope. Deny instead.
+  if (scope === 'EMPLOYEE' && !targetEmpId) {
+    return NextResponse.json(
+      { success: false, error: 'No employee profile is linked to this account' },
+      { status: 403 }
+    );
+  }
+  if (scope === 'DEPARTMENT' && !targetDeptId) {
+    return NextResponse.json(
+      { success: false, error: 'You are not assigned to a department' },
+      { status: 403 }
+    );
+  }
+
   const now = new Date();
   const where: any = {
-    status: 'ACTIVE',
+    status: { in: HELD_ALLOCATION_STATUSES },
     isCurrent: true,
     expectedReturnDate: { lt: now },
     isDeleted: false,

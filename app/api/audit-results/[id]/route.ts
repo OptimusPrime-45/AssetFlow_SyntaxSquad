@@ -34,11 +34,25 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const auditResult = await prisma.auditResult.findFirst({
       where: { id, isDeleted: false },
-      include: { asset: true },
+      include: { asset: true, cycle: { select: { status: true, title: true } } },
     });
 
     if (!auditResult) {
       return NextResponse.json({ success: false, error: 'Audit result not found' }, { status: 404 });
+    }
+
+    // Closing an audit LOCKS its records — that is the whole point of a cycle. This
+    // route never looked at the cycle's status, so a closed audit's findings could
+    // be rewritten after the fact, resurrecting discrepancies and contradicting the
+    // asset changes the closure already applied.
+    if (auditResult.cycle.status === 'CLOSED' || auditResult.cycle.status === 'CANCELLED') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Audit cycle "${auditResult.cycle.title}" is ${auditResult.cycle.status}. Its findings are locked and can no longer be changed.`,
+        },
+        { status: 409 }
+      );
     }
 
     const body = await request.json();
