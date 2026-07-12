@@ -106,13 +106,23 @@ export default function Assets() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Fetch Assets
+
       let query = `/api/assets?page=${page}&limit=${limit}`;
       if (search) query += `&search=${encodeURIComponent(search)}`;
       if (selectedCategory) query += `&categoryId=${selectedCategory}`;
       if (selectedStatus) query += `&status=${selectedStatus}`;
 
-      const assetRes = await fetch(query);
+      // Independent of each other — awaiting them in turn cost a round trip each.
+      // Employees/departments only feed the manager allocation dropdowns.
+      const isManager = role === "ADMIN" || role === "ASSET_MANAGER";
+
+      const [assetRes, catRes, empRes, deptRes] = await Promise.all([
+        fetch(query),
+        fetch("/api/asset-categories"),
+        isManager ? fetch("/api/employees?limit=100") : null,
+        isManager ? fetch("/api/departments") : null,
+      ]);
+
       if (assetRes.status === 200) {
         const data = await assetRes.json();
         if (data.success) {
@@ -121,8 +131,6 @@ export default function Assets() {
         }
       }
 
-      // Fetch Categories
-      const catRes = await fetch("/api/asset-categories");
       if (catRes.status === 200) {
         const data = await catRes.json();
         if (data.success) {
@@ -130,21 +138,17 @@ export default function Assets() {
         }
       }
 
-      // Fetch Employees and Departments for managers
-      if (role === "ADMIN" || role === "ASSET_MANAGER") {
-        const empRes = await fetch("/api/employees?limit=100");
-        if (empRes.status === 200) {
-          const data = await empRes.json();
-          if (data.success) {
-            setEmployees(data.employees);
-          }
+      if (empRes && empRes.status === 200) {
+        const data = await empRes.json();
+        if (data.success) {
+          setEmployees(data.employees);
         }
-        const deptRes = await fetch("/api/departments");
-        if (deptRes.status === 200) {
-          const data = await deptRes.json();
-          if (data.success) {
-            setDepartments(data.departments);
-          }
+      }
+
+      if (deptRes && deptRes.status === 200) {
+        const data = await deptRes.json();
+        if (data.success) {
+          setDepartments(data.departments);
         }
       }
     } catch (e) {

@@ -123,8 +123,15 @@ export default function Settings() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Fetch settings
-      const settingsRes = await fetch("/api/settings");
+
+      // Independent of each other — awaiting them in turn cost a round trip per tab.
+      const [settingsRes, deptRes, catRes, empRes] = await Promise.all([
+        fetch("/api/settings"),
+        fetch("/api/departments"),
+        fetch("/api/asset-categories"),
+        fetch("/api/employees?limit=100"),
+      ]);
+
       if (settingsRes.status === 200) {
         const data = await settingsRes.json();
         if (data.success) {
@@ -132,8 +139,6 @@ export default function Settings() {
         }
       }
 
-      // Fetch departments
-      const deptRes = await fetch("/api/departments");
       if (deptRes.status === 200) {
         const data = await deptRes.json();
         if (data.success) {
@@ -141,8 +146,6 @@ export default function Settings() {
         }
       }
 
-      // Fetch categories
-      const catRes = await fetch("/api/asset-categories");
       if (catRes.status === 200) {
         const data = await catRes.json();
         if (data.success) {
@@ -150,8 +153,6 @@ export default function Settings() {
         }
       }
 
-      // Fetch employees
-      const empRes = await fetch("/api/employees?limit=100");
       if (empRes.status === 200) {
         const data = await empRes.json();
         if (data.success) {

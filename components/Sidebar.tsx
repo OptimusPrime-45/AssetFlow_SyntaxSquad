@@ -41,7 +41,9 @@ export default function Sidebar({ activePage }: SidebarProps) {
       label: "§ 03 · Bookings",
       icon: "calendar_today",
       href: "/bookings",
-      roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
+      // Not EMPLOYEE — they get the "My Bookings" entry below, and listing them
+      // here too rendered the link twice under a duplicate key.
+      roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD"],
     },
     // Employee My Bookings
     {
@@ -86,7 +88,9 @@ export default function Sidebar({ activePage }: SidebarProps) {
       label: "§ 05 · Audits",
       icon: "verified_user",
       href: "/audits",
-      roles: ["ADMIN"],
+      // Asset Managers create and run audit cycles (POST /api/audit-cycles
+      // authorizes them), so they need the link.
+      roles: ["ADMIN", "ASSET_MANAGER"],
     },
     {
       id: "reports",

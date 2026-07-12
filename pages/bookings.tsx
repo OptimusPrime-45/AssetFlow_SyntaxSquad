@@ -68,11 +68,15 @@ export default function Bookings() {
       setLoading(true);
 
       // Independent of each other — awaiting them in turn made the page wait out
-      // three round trips instead of one. Calendar scope is handled by the backend.
-      const [allRes, myRes, assetRes] = await Promise.all([
+      // one round trip per list. Calendar scope is handled by the backend, and the
+      // approvals queue is only fetched for the roles that can act on it.
+      const canApprove = Boolean(role && role !== "EMPLOYEE");
+
+      const [allRes, myRes, pendingRes, assetRes] = await Promise.all([
         fetch("/api/bookings?limit=100"),
         fetch("/api/bookings/my?limit=50"),
-        fetch("/api/assets?limit=100"),
+        canApprove ? fetch("/api/bookings?status=PENDING&limit=100") : null,
+        fetch("/api/assets/bookable"),
       ]);
 
       if (allRes.status === 200) {
@@ -89,19 +93,13 @@ export default function Bookings() {
         }
       }
 
-      // Fetch pending bookings for approval queue if not EMPLOYEE
-      if (role && role !== "EMPLOYEE") {
-        const pendingRes = await fetch("/api/bookings?status=PENDING&limit=100");
-        if (pendingRes.status === 200) {
-          const data = await pendingRes.json();
-          if (data.success) {
-            setPendingBookings(data.bookings);
-          }
+      if (pendingRes && pendingRes.status === 200) {
+        const data = await pendingRes.json();
+        if (data.success) {
+          setPendingBookings(data.bookings);
         }
       }
 
-      // Fetch bookable assets
-      const assetRes = await fetch("/api/assets/bookable");
       if (assetRes.status === 200) {
         const data = await assetRes.json();
         if (data.success) {
