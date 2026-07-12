@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { checkAuth } from '@/lib/auth/rbac';
+import { syncRolesForNewHead } from '@/lib/org/head-sync';
 import { z } from 'zod';
 
 const createDepartmentSchema = z.object({
@@ -123,22 +124,33 @@ export async function POST(request: Request) {
       }
     }
 
-    const newDept = await prisma.department.create({
-      data: {
-        name,
-        code,
-        description: description || null,
-        parentDepartmentId: parentDepartmentId || null,
-        headEmployeeId: headEmployeeId || null,
-      },
-      include: {
-        parentDepartment: {
-          select: { id: true, name: true, code: true }
+    const newDept = await prisma.$transaction(async (tx) => {
+      const dept = await tx.department.create({
+        data: {
+          name,
+          code,
+          description: description || null,
+          parentDepartmentId: parentDepartmentId || null,
+          headEmployeeId: headEmployeeId || null,
         },
-        headEmployee: {
-          select: { id: true, firstName: true, lastName: true, employeeCode: true }
+        include: {
+          parentDepartment: {
+            select: { id: true, name: true, code: true }
+          },
+          headEmployee: {
+            select: { id: true, firstName: true, lastName: true, employeeCode: true }
+          }
         }
-      }
+      });
+
+      // Same rule as PATCH /api/departments/:id/head — heading a department *is*
+      // the DEPARTMENT_HEAD role, so a head named at creation time gets it too.
+      await syncRolesForNewHead(tx, {
+        previousHeadId: null,
+        newHeadId: headEmployeeId || null,
+      });
+
+      return dept;
     });
 
     return NextResponse.json({ success: true, department: newDept }, { status: 201 });
