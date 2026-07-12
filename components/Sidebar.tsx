@@ -19,6 +19,7 @@ export default function Sidebar({ activePage }: SidebarProps) {
       href: "/dashboard",
       roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
     },
+    // Manager Assets
     {
       id: "assets",
       label: "§ 02 · Assets",
@@ -26,6 +27,15 @@ export default function Sidebar({ activePage }: SidebarProps) {
       href: "/assets",
       roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD"],
     },
+    // Employee My Assets
+    {
+      id: "assets",
+      label: "§ 02 · My Assets",
+      icon: "account_balance_wallet",
+      href: "/assets",
+      roles: ["EMPLOYEE"],
+    },
+    // Manager Bookings
     {
       id: "bookings",
       label: "§ 03 · Bookings",
@@ -33,19 +43,50 @@ export default function Sidebar({ activePage }: SidebarProps) {
       href: "/bookings",
       roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
     },
+    // Employee My Bookings
+    {
+      id: "bookings",
+      label: "§ 03 · My Bookings",
+      icon: "calendar_today",
+      href: "/bookings",
+      roles: ["EMPLOYEE"],
+    },
+    // Manager Workflows
     {
       id: "workflows",
       label: "§ 04 · Workflows",
       icon: "account_tree",
       href: "/workflows",
-      roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
+      roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD"],
+    },
+    // Employee Maintenance
+    {
+      id: "workflows",
+      label: "§ 04 · Maintenance",
+      icon: "build",
+      href: "/workflows",
+      roles: ["EMPLOYEE"],
+    },
+    {
+      id: "notifications",
+      label: "§ 05 · Notifications",
+      icon: "notifications",
+      href: "/notifications",
+      roles: ["EMPLOYEE"],
+    },
+    {
+      id: "profile",
+      label: "§ 06 · Profile",
+      icon: "account_circle",
+      href: "/profile",
+      roles: ["EMPLOYEE"],
     },
     {
       id: "audits",
       label: "§ 05 · Audits",
       icon: "verified_user",
       href: "/audits",
-      roles: ["ADMIN", "EMPLOYEE"], // Employee serves as auditor role scope
+      roles: ["ADMIN"],
     },
     {
       id: "reports",

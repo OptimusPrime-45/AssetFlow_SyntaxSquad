@@ -19,7 +19,7 @@ interface Booking {
   title: string;
   purpose: "ROOM" | "VEHICLE" | "EQUIPMENT" | "SPACE" | "OTHER";
   audience: "INDIVIDUAL" | "DEPARTMENT";
-  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "COMPLETED" | "ACTIVE" | "NOSHOW";
+  status: "PENDING" | "UPCOMING" | "ONGOING" | "APPROVED" | "REJECTED" | "CANCELLED" | "COMPLETED" | "ACTIVE" | "NOSHOW";
   startAt: string;
   endAt: string;
   notes: string | null;
@@ -101,15 +101,11 @@ export default function Bookings() {
       }
 
       // Fetch bookable assets
-      const assetRes = await fetch("/api/assets?limit=100");
+      const assetRes = await fetch("/api/assets/bookable");
       if (assetRes.status === 200) {
         const data = await assetRes.json();
         if (data.success) {
-          // Filter to bookable category or explicit bookable flag
-          const filtered = data.assets.filter(
-            (a: any) => a.sharedBookable || a.category?.isBookable
-          );
-          setBookableAssets(filtered);
+          setBookableAssets(data.assets);
         }
       }
     } catch (e) {
