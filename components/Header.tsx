@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/context/AuthContext";
 
 interface HeaderProps {
@@ -15,11 +16,63 @@ interface Notification {
 }
 
 export default function Header({ section }: HeaderProps) {
-  const { user } = useAuth();
+  const { user, role, refreshUser } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleAvatarClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    fileInputRef.current?.click();
+  };
+
+  const handleHeaderAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.employee) return;
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", "avatars");
+
+      const uploadRes = await fetch("/api/uploads", {
+        method: "POST",
+        body: formData,
+      });
+
+      const uploadData = await uploadRes.json().catch(() => ({}));
+      if (uploadRes.status === 200 && uploadData.success && uploadData.secure_url) {
+        const updateRes = await fetch(`/api/employees/${user.employee.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ avatarUrl: uploadData.secure_url }),
+        });
+        const updateData = await updateRes.json().catch(() => ({}));
+        if (updateRes.status === 200 && updateData.success) {
+          alert("Profile photo updated successfully!");
+          if (refreshUser) {
+            await refreshUser();
+          }
+        } else {
+          alert(`Error saving photo: ${updateData.error || "Failed to update profile"}`);
+        }
+      } else {
+        alert(`Upload failed: ${uploadData.error || "Failed to upload photo"}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("An error occurred during file upload.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
 
   const fetchNotifications = async () => {
     try {
@@ -163,17 +216,30 @@ export default function Header({ section }: HeaderProps) {
 
         {/* Profile Info Avatar */}
         {user && (
-          <div className="flex items-center gap-3">
+          <div
+            onClick={handleAvatarClick}
+            className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer group"
+            title="Click to change Profile Photo"
+          >
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleHeaderAvatarUpload}
+              className="hidden"
+              accept="image/*"
+            />
             <div className="text-right">
-              <div className="font-label-mono text-[11px] text-on-surface font-semibold leading-none mb-1">
+              <div className="font-label-mono text-[11px] text-on-surface font-semibold leading-none mb-1 group-hover:text-primary transition-colors">
                 {user.employee ? `${user.employee.firstName} ${user.employee.lastName}` : user.email}
               </div>
               <div className="font-label-mono text-[9px] text-secondary uppercase tracking-widest leading-none">
-                {user.employee?.designation || user.role}
+                {role === "DEPARTMENT_HEAD" ? "Department Head" : (user.employee?.designation || user.role)}
               </div>
             </div>
-            <div className="h-8 w-8 bg-primary-container text-on-primary-container font-section-number text-xs font-bold flex items-center justify-center rounded-full overflow-hidden border border-border-hairline">
-              {user.employee?.avatarUrl ? (
+            <div className="h-8 w-8 bg-primary-container text-on-primary-container font-section-number text-xs font-bold flex items-center justify-center rounded-full overflow-hidden border border-border-hairline group-hover:border-primary transition-colors relative">
+              {uploading ? (
+                <span className="text-[10px] animate-pulse">...</span>
+              ) : user.employee?.avatarUrl ? (
                 <img
                   className="object-cover w-full h-full"
                   alt="User profile avatar"

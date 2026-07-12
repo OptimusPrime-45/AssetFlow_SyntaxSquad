@@ -130,6 +130,58 @@ function DepartmentHeadConsole({ departmentId, user, employee }: { departmentId:
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
+  const { refreshUser } = useAuth();
+  const profileFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleProfileAvatarClick = () => {
+    profileFileInputRef.current?.click();
+  };
+
+  const handleProfileAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setActionLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", "avatars");
+
+      const uploadRes = await fetch("/api/uploads", {
+        method: "POST",
+        body: formData,
+      });
+
+      const uploadData = await uploadRes.json().catch(() => ({}));
+      if (uploadRes.status === 200 && uploadData.success && uploadData.secure_url) {
+        const updateRes = await fetch(`/api/employees/${employee.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ avatarUrl: uploadData.secure_url }),
+        });
+        const updateData = await updateRes.json().catch(() => ({}));
+        if (updateRes.status === 200 && updateData.success) {
+          alert("Profile photo updated successfully!");
+          if (refreshUser) {
+            await refreshUser();
+          }
+        } else {
+          alert(`Error saving photo: ${updateData.error || "Failed to update profile"}`);
+        }
+      } else {
+        alert(`Upload failed: ${uploadData.error || "Failed to upload photo"}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("An error occurred during file upload.");
+    } finally {
+      setActionLoading(false);
+      if (profileFileInputRef.current) {
+        profileFileInputRef.current.value = "";
+      }
+    }
+  };
+
   // Forms states
   const [bookableAssets, setBookableAssets] = useState<any[]>([]);
   const [bookingForm, setBookingForm] = useState({
@@ -1312,12 +1364,32 @@ function DepartmentHeadConsole({ departmentId, user, employee }: { departmentId:
 
                   <div className="bg-surface border border-border-hairline p-8 max-w-2xl text-xs space-y-6">
                     <div className="flex items-center gap-6 pb-6 border-b border-border-hairline">
-                      <div className="w-16 h-16 bg-primary-fixed flex items-center justify-center text-primary text-2xl font-bold">
-                        {employee.firstName[0]}{employee.lastName[0]}
+                      <div
+                        onClick={handleProfileAvatarClick}
+                        className="w-16 h-16 bg-primary-fixed flex items-center justify-center text-primary text-xl font-bold rounded-full overflow-hidden border border-border-hairline relative group cursor-pointer hover:border-primary transition-all"
+                        title="Click to change profile picture"
+                      >
+                        <input
+                          type="file"
+                          ref={profileFileInputRef}
+                          onChange={handleProfileAvatarUpload}
+                          className="hidden"
+                          accept="image/*"
+                        />
+                        {employee.avatarUrl ? (
+                          <img src={employee.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                        ) : (
+                          <span>{employee.firstName[0]}{employee.lastName[0]}</span>
+                        )}
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[8px] font-label-mono uppercase tracking-wider transition-opacity">
+                          Change
+                        </div>
                       </div>
                       <div>
                         <h2 className="text-base font-bold">{employee.firstName} {employee.lastName}</h2>
-                        <p className="text-secondary font-label-mono uppercase text-[10px] mt-1">{employee.designation || "Department Head"}</p>
+                        <p className="text-secondary font-label-mono uppercase text-[10px] mt-1">
+                          {user.role === "DEPARTMENT_HEAD" ? "Department Head" : (employee.designation || "Staff Member")}
+                        </p>
                       </div>
                     </div>
 
