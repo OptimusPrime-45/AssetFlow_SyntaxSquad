@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -18,20 +16,81 @@ export default function Register() {
   const [role, setRole] = useState("Employee");
 
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    setFormError(null);
+
+    // Simple validations before moving ahead
+    if (currentStep === 1) {
+      if (!firstName || !lastName || !email) {
+        setFormError("All profile fields are required");
+        return;
+      }
+    }
+
+    if (currentStep === 2) {
+      if (!password || !confirmPassword) {
+        setFormError("Password fields are required");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setFormError("Passwords do not match");
+        return;
+      }
+      if (password.length < 8) {
+        setFormError("Password must be at least 8 characters long");
+        return;
+      }
+    }
+
     if (currentStep < 4) {
       setCurrentStep((prev) => prev + 1);
     } else {
       // Submit logic
       setSubmitting(true);
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 1500);
+      try {
+        const res = await fetch("/api/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            password,
+            firstName,
+            lastName,
+            designation: role,
+            departmentId: null, // Scoped & assigned by Admin post-signup
+          }),
+        });
+
+        const data = await res.json();
+        setSubmitting(false);
+
+        if (res.status === 201 && data.success) {
+          // Trigger auto-login
+          const loginRes = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+
+          if (loginRes.status === 200) {
+            router.push("/dashboard");
+          } else {
+            router.push("/login");
+          }
+        } else {
+          setFormError(data.error || "An error occurred during registration");
+        }
+      } catch (e) {
+        setSubmitting(false);
+        setFormError("A network error occurred. Please try again.");
+      }
     }
   };
 
   const handlePrev = () => {
+    setFormError(null);
     if (currentStep > 1) {
       setCurrentStep((prev) => prev - 1);
     }
@@ -159,6 +218,11 @@ export default function Register() {
           {/* Form Card */}
           <div className="bg-white border border-border-hairline p-card-padding relative overflow-hidden">
             <div className="space-y-8">
+              {formError && (
+                <div className="p-4 bg-error-container text-on-error-container font-label-mono text-xs uppercase tracking-wider">
+                  {formError}
+                </div>
+              )}
               {/* Step 1: Profile */}
               {currentStep === 1 && (
                 <div className="space-y-6">
