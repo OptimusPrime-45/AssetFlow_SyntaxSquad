@@ -2,12 +2,19 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { checkAuth } from '@/lib/auth/rbac';
 import { hashPassword } from '@/lib/auth/password';
-import { EmployeeStatus, UserRole } from '@/app/generated/prisma/enums';
+import { withEmployeeCode } from '@/lib/employee-code';
+import { EmployeeStatus } from '@/app/generated/prisma/enums';
 import { z } from 'zod';
 import crypto from 'crypto';
 
+// No `role` and no `employeeCode` here, by design:
+//
+//   role — accepting it let an Asset Manager POST {role: 'ADMIN', password}, then
+//   log in as the Admin they just minted. Every account is created as EMPLOYEE;
+//   PATCH /api/employees/:id/role (Admin-only) is the sole way to grant a role.
+//
+//   employeeCode — issued by the server, same as asset tags.
 const createEmployeeSchema = z.object({
-  employeeCode: z.string().min(1, 'Employee code is required').toUpperCase(),
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   phone: z.string().nullable().optional(),
@@ -21,7 +28,6 @@ const createEmployeeSchema = z.object({
   userId: z.string().optional(),
   email: z.string().email('Invalid email address').optional(),
   password: z.string().min(8, 'Password must be at least 8 characters long').optional(),
-  role: z.enum(['EMPLOYEE', 'DEPARTMENT_HEAD', 'ASSET_MANAGER', 'ADMIN'] as const).optional(),
 });
 
 export async function GET(request: Request) {
@@ -106,18 +112,6 @@ export async function POST(request: Request) {
 
     const data = result.data;
 
-    // Check employee code uniqueness
-    const existingCode = await prisma.employee.findUnique({
-      where: { employeeCode: data.employeeCode },
-    });
-
-    if (existingCode) {
-      return NextResponse.json(
-        { success: false, error: `Employee code '${data.employeeCode}' is already in use` },
-        { status: 400 }
-      );
-    }
-
     // Validate department if provided
     if (data.departmentId) {
       const dept = await prisma.department.findFirst({
@@ -131,7 +125,7 @@ export async function POST(request: Request) {
       }
     }
 
-    let finalUserId: string;
+    let existingUserId: string | null = null;
 
     if (data.userId) {
       // Link to existing user
@@ -158,7 +152,7 @@ export async function POST(request: Request) {
         );
       }
 
-      finalUserId = data.userId;
+      existingUserId = data.userId;
     } else {
       // Must create user, so email is required
       if (!data.email) {
@@ -179,51 +173,65 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
-
-      // Hash password
-      const rawPassword = data.password || crypto.randomBytes(12).toString('hex');
-      const passwordHash = await hashPassword(rawPassword);
-
-      // Create user inside a transaction along with employee below
-      const createdUser = await prisma.user.create({
-        data: {
-          email: data.email,
-          passwordHash,
-          role: data.role || 'EMPLOYEE',
-          status: 'ACTIVE', // Automatically mark active for admin-created employees
-        }
-      });
-      finalUserId = createdUser.id;
     }
 
-    // Create Employee record
     const joinedAtDate = data.joinedAt ? new Date(data.joinedAt) : new Date();
 
-    const employee = await prisma.employee.create({
-      data: {
-        userId: finalUserId,
-        employeeCode: data.employeeCode,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        phone: data.phone || null,
-        avatarUrl: data.avatarUrl || null,
-        designation: data.designation || null,
-        departmentId: data.departmentId || null,
-        status: (data.status as EmployeeStatus) || 'ACTIVE',
-        joinedAt: joinedAtDate,
-        notes: data.notes || null,
-      },
-      include: {
-        department: {
-          select: { id: true, name: true, code: true }
-        },
-        user: {
-          select: { id: true, email: true, role: true, status: true }
-        }
-      }
-    });
+    // Only surfaced when we generated it, so the Admin can pass it on.
+    const generatedPassword =
+      existingUserId || data.password ? null : crypto.randomBytes(12).toString('hex');
 
-    return NextResponse.json({ success: true, employee }, { status: 201 });
+    // User and employee are created together: a failure partway through must not
+    // leave behind a User with no Employee profile.
+    const employee = await withEmployeeCode((employeeCode) =>
+      prisma.$transaction(async (tx) => {
+        let userId = existingUserId;
+
+        if (!userId) {
+          const passwordHash = await hashPassword(data.password ?? generatedPassword!);
+          const createdUser = await tx.user.create({
+            data: {
+              email: data.email!,
+              passwordHash,
+              // Always EMPLOYEE — see the note on createEmployeeSchema.
+              role: 'EMPLOYEE',
+              status: 'ACTIVE',
+              emailVerifiedAt: new Date(),
+            },
+          });
+          userId = createdUser.id;
+        }
+
+        return tx.employee.create({
+          data: {
+            userId,
+            employeeCode,
+            firstName: data.firstName,
+            lastName: data.lastName,
+            phone: data.phone || null,
+            avatarUrl: data.avatarUrl || null,
+            designation: data.designation || null,
+            departmentId: data.departmentId || null,
+            status: (data.status as EmployeeStatus) || 'ACTIVE',
+            joinedAt: joinedAtDate,
+            notes: data.notes || null,
+          },
+          include: {
+            department: {
+              select: { id: true, name: true, code: true }
+            },
+            user: {
+              select: { id: true, email: true, role: true, status: true }
+            }
+          }
+        });
+      })
+    );
+
+    return NextResponse.json(
+      { success: true, employee, ...(generatedPassword ? { generatedPassword } : {}) },
+      { status: 201 }
+    );
   } catch (error: any) {
     console.error('POST /api/employees error:', error);
     return NextResponse.json(

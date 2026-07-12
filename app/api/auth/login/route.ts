@@ -36,7 +36,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check account status
+    // Must mirror verifySession, which only honours an ACTIVE account. If login
+    // let a non-ACTIVE user in, they'd get a cookie and then 401 on every
+    // subsequent request.
     if (user.status === 'SUSPENDED') {
       return NextResponse.json(
         { success: false, error: 'Your account has been suspended' },
@@ -47,6 +49,13 @@ export async function POST(request: Request) {
     if (user.status === 'INACTIVE') {
       return NextResponse.json(
         { success: false, error: 'Your account is currently inactive' },
+        { status: 403 }
+      );
+    }
+
+    if (user.status === 'PENDING_VERIFICATION') {
+      return NextResponse.json(
+        { success: false, error: 'Please verify your email address before logging in' },
         { status: 403 }
       );
     }
