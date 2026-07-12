@@ -81,7 +81,7 @@ export default function Sidebar({ activePage }: SidebarProps) {
       label: "§ 06 · Profile",
       icon: "account_circle",
       href: "/profile",
-      roles: ["EMPLOYEE"],
+      roles: ["ADMIN", "ASSET_MANAGER", "EMPLOYEE"],
     },
     {
       id: "audits",

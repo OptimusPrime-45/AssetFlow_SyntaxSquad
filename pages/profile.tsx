@@ -287,7 +287,9 @@ export default function Profile() {
                   </label>
                 </div>
                 <h3 className="font-display-lg text-lg font-bold text-on-surface">{firstName} {lastName}</h3>
-                <p className="font-label-mono text-[10px] uppercase text-secondary tracking-wider mt-1">{designation || "Staff Member"}</p>
+                <p className="font-label-mono text-[10px] uppercase text-secondary tracking-wider mt-1">
+                  {user.role !== "EMPLOYEE" ? user.role.replace("_", " ") : (designation || "Staff Member")}
+                </p>
               </div>
 
               <div className="space-y-4 text-xs font-label-mono text-secondary uppercase">
