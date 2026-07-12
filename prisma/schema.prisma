@@ -1,7 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// =====================================================================
+// AssetFlow — Production Schema
+// =====================================================================
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +9,1182 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// =====================================================================
+// Part 1: Foundation
+// =====================================================================
+
+enum UserRole {
+  EMPLOYEE
+  DEPARTMENT_HEAD
+  ASSET_MANAGER
+  ADMIN
+}
+
+enum AccountStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  MICROSOFT
+}
+
+enum DepartmentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum AssetCategoryStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model User {
+  id                  String        @id @default(cuid())
+  email               String        @unique
+  passwordHash        String?
+  role                UserRole      @default(EMPLOYEE)
+  status              AccountStatus @default(PENDING_VERIFICATION)
+  authProvider        AuthProvider  @default(LOCAL)
+  emailVerifiedAt     DateTime?
+  lastLoginAt         DateTime?
+  isDeleted           Boolean       @default(false)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  employee            Employee?     @relation("UserEmployee")
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
+
+  // Added: back-relations for models introduced in later parts
+  notifications       Notification[]
+  activityLogs        ActivityLog[] @relation("ActivityLogActorUser")
+
+  @@index([role])
+  @@index([status, isDeleted])
+  @@map("users")
+}
+
+model Employee {
+  id               String         @id @default(cuid())
+  userId           String         @unique
+  employeeCode     String         @unique
+  firstName        String
+  lastName         String
+  phone            String?
+  avatarUrl        String?
+  designation      String?
+  status           EmployeeStatus @default(ACTIVE)
+  departmentId     String?
+  joinedAt         DateTime       @default(now())
+  leftAt           DateTime?
+  notes            String?
+  isDeleted        Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  user              User          @relation("UserEmployee", fields: [userId], references: [id], onDelete: Cascade)
+  department        Department?   @relation("DepartmentEmployees", fields: [departmentId], references: [id], onDelete: SetNull)
+
+  headedDepartments Department[]  @relation("DepartmentHead")
+
+  // Added: back-relations for models introduced in later parts.
+  // Employee is the universal "actor" type in this schema, so it
+  // accumulates one inverse array per named relation that targets it.
+  assetStatusChanges         AssetStatusHistory[]
+  allocationsHeld            AssetAllocation[]      @relation("AllocationToEmployee")
+  allocationsCreated         AssetAllocation[]      @relation("AllocationCreatedBy")
+  allocationsApproved        AssetAllocation[]      @relation("AllocationApprovedBy")
+  transfersRequested         AssetTransferRequest[] @relation("TransferRequestedBy")
+  transfersFrom              AssetTransferRequest[] @relation("TransferFromEmployee")
+  transfersTo                AssetTransferRequest[] @relation("TransferToEmployee")
+  transfersReviewed          AssetTransferRequest[] @relation("TransferReviewedBy")
+  returnsSubmitted           AssetReturn[]          @relation("ReturnSubmittedBy")
+  returnsReceived            AssetReturn[]          @relation("ReturnReceivedBy")
+  allocationHistoryActions   AllocationHistory[]    @relation("AllocationHistoryActor")
+  bookingsCreated            ResourceBooking[]      @relation("BookingCreatedBy")
+  bookingsApproved           ResourceBooking[]      @relation("BookingApprovedBy")
+  maintenanceRaised          MaintenanceRequest[]   @relation("MaintenanceRaisedBy")
+  maintenanceApproved        MaintenanceRequest[]   @relation("MaintenanceApprovedBy")
+  maintenanceAssigned        MaintenanceRequest[]   @relation("MaintenanceTechnician")
+  maintenanceHistoryActions  MaintenanceHistory[]
+  auditCyclesCreated         AuditCycle[]           @relation("AuditCycleCreatedBy")
+  auditAssignments           AuditAssignment[]      @relation("AuditAssignee")
+  auditAssignmentsMade       AuditAssignment[]      @relation("AuditAssignedBy")
+  auditResultsRecorded       AuditResult[]          @relation("AuditResultAuditor")
+  auditResultsReviewed       AuditResult[]          @relation("AuditResultReviewedBy")
+  auditDiscrepanciesResolved AuditDiscrepancy[]     @relation("AuditDiscrepancyResolvedBy")
+  activityLogs                ActivityLog[]         @relation("ActivityLogActorEmployee")
+  kpiSnapshots                DashboardKpiSnapshot[]
+
+  @@index([departmentId])
+  @@index([status, isDeleted])
+  @@map("employees")
+}
+
+model Department {
+  id                 String           @id @default(cuid())
+  name               String
+  code               String           @unique
+  description        String?
+  status             DepartmentStatus @default(ACTIVE)
+  parentDepartmentId String?
+  headEmployeeId     String?
+  isDeleted          Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  parentDepartment   Department?      @relation("DepartmentHierarchy", fields: [parentDepartmentId], references: [id], onDelete: SetNull)
+  childDepartments   Department[]     @relation("DepartmentHierarchy")
+
+  headEmployee       Employee?        @relation("DepartmentHead", fields: [headEmployeeId], references: [id], onDelete: SetNull)
+  employees          Employee[]       @relation("DepartmentEmployees")
+
+  // Added: back-relations for models introduced in later parts
+  assets             Asset[]
+  allocationsHeld    AssetAllocation[]      @relation("AllocationToDepartment")
+  transfersFrom      AssetTransferRequest[] @relation("TransferFromDepartment")
+  transfersTo        AssetTransferRequest[] @relation("TransferToDepartment")
+  bookings           ResourceBooking[]
+  auditCycles        AuditCycle[]
+  kpiSnapshots       DashboardKpiSnapshot[]
+
+  @@index([parentDepartmentId])
+  @@index([headEmployeeId])
+  @@index([status, isDeleted])
+  @@unique([name, parentDepartmentId])
+  @@map("departments")
+}
+
+model AssetCategory {
+  id              String              @id @default(cuid())
+  name            String
+  code            String              @unique
+  description     String?
+  status          AssetCategoryStatus @default(ACTIVE)
+  warrantyMonths  Int?
+  hasSerialNumber Boolean             @default(true)
+  isBookable      Boolean             @default(false)
+  isDeleted       Boolean             @default(false)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  // Added: back-relations for models introduced in later parts
+  assets            Asset[]
+  fieldDefinitions  AssetCategoryFieldDefinition[]
+
+  @@unique([name])
+  @@index([status, isDeleted])
+  @@map("asset_categories")
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  ipAddress String?
+  userAgent String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+// =====================================================================
+// Part 2: Asset Core
+// =====================================================================
+
+enum AssetStatus {
+  AVAILABLE
+  ALLOCATED
+  RESERVED
+  UNDER_MAINTENANCE
+  LOST
+  RETIRED
+  DISPOSED
+}
+
+enum AssetCondition {
+  NEW
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  DAMAGED
+}
+
+enum AssetMediaType {
+  IMAGE
+  DOCUMENT
+}
+
+enum AssetStatusChangeReason {
+  REGISTRATION
+  ALLOCATION
+  RETURN
+  TRANSFER
+  MAINTENANCE_APPROVAL
+  MAINTENANCE_RESOLUTION
+  AUDIT_VERIFICATION
+  AUDIT_DISCREPANCY
+  MANUAL_UPDATE
+  RETIREMENT
+  DISPOSAL
+  LOSS
+}
+
+model Asset {
+  id               String         @id @default(cuid())
+  assetTag         String         @unique
+  name             String
+  categoryId       String
+  serialNumber     String?        @unique
+  acquisitionDate  DateTime?
+  acquisitionCost  Decimal?       @db.Decimal(12, 2)
+  condition        AssetCondition @default(GOOD)
+  status           AssetStatus    @default(AVAILABLE)
+  location         String?
+  description      String?
+  departmentId     String?
+  sharedBookable   Boolean        @default(false)
+  qrEnabled        Boolean        @default(true)
+  retiredAt        DateTime?
+  disposedAt       DateTime?
+  lostAt           DateTime?
+  isDeleted        Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  category         AssetCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  department       Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  qrCode           AssetQrCode?
+  images           AssetImage[]
+  documents        AssetDocument[]
+  statusHistory    AssetStatusHistory[]
+
+  allocations      AssetAllocation[]
+  transferRequests AssetTransferRequest[]
+  maintenanceRequests MaintenanceRequest[]
+  bookings         ResourceBooking[]
+  auditResults     AuditResult[]
+  discrepancies    AuditDiscrepancy[]
+
+  // Added: back-relation for the custom-field values introduced in Part 8
+  customFieldValues AssetCategoryFieldValue[]
+
+  @@index([categoryId])
+  @@index([departmentId])
+  @@index([status, isDeleted])
+  @@index([condition])
+  @@index([sharedBookable])
+  @@index([name])
+  @@map("assets")
+}
+
+model AssetQrCode {
+  id            String    @id @default(cuid())
+  assetId       String    @unique
+  qrCodeValue   String    @unique
+  qrPayload     String?
+  scanCount     Int       @default(0)
+  generatedAt   DateTime  @default(now())
+  lastScannedAt DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  asset         Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([isActive])
+  @@index([generatedAt])
+  @@map("asset_qr_codes")
+}
+
+model AssetImage {
+  id        String         @id @default(cuid())
+  assetId   String
+  url       String
+  fileName  String?
+  mimeType  String?
+  fileSize  Int?
+  mediaType AssetMediaType @default(IMAGE)
+  isPrimary Boolean        @default(false)
+  altText   String?
+  sortOrder Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  asset     Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([isPrimary])
+  @@index([sortOrder])
+  @@map("asset_images")
+}
+
+model AssetDocument {
+  id          String         @id @default(cuid())
+  assetId     String
+  title       String
+  url         String
+  fileName    String?
+  mimeType    String?
+  fileSize    Int?
+  mediaType   AssetMediaType @default(DOCUMENT)
+  description String?
+  sortOrder   Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  asset       Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([sortOrder])
+  @@map("asset_documents")
+}
+
+model AssetStatusHistory {
+  id            String                   @id @default(cuid())
+  assetId       String
+  fromStatus    AssetStatus?
+  toStatus      AssetStatus
+  fromCondition AssetCondition?
+  toCondition   AssetCondition?
+  reason        AssetStatusChangeReason
+  note          String?
+  changedById   String?
+  createdAt     DateTime                 @default(now())
+
+  asset         Asset                    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  changedBy     Employee?                @relation(fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([assetId, createdAt])
+  @@index([changedById])
+  @@index([reason])
+  @@map("asset_status_history")
+}
+
+// =====================================================================
+// Part 3: Allocation, Transfer, Return
+// =====================================================================
+
+enum AllocationStatus {
+  ACTIVE
+  RETURN_PENDING
+  RETURNED
+  TRANSFER_PENDING
+  TRANSFERRED
+  OVERDUE
+  REVOKED
+  CANCELLED
+}
+
+enum TransferRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+enum ReturnStatus {
+  PENDING_INSPECTION
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum AllocationHistoryEvent {
+  ALLOCATED
+  RETURN_REQUESTED
+  RETURN_APPROVED
+  RETURN_REJECTED
+  RETURNED
+  TRANSFER_REQUESTED
+  TRANSFER_APPROVED
+  TRANSFER_REJECTED
+  TRANSFERRED
+  OVERDUE_FLAGGED
+  REVOKED
+  CANCELLED
+}
+
+model AssetAllocation {
+  id                      String           @id @default(cuid())
+  assetId                 String
+  allocatedToEmployeeId   String?
+  allocatedToDepartmentId String?
+  allocatedById           String?
+  approvedById            String?
+  status                  AllocationStatus @default(ACTIVE)
+  allocatedAt             DateTime         @default(now())
+  expectedReturnDate      DateTime?
+  actualReturnDate        DateTime?
+  allocationNote          String?
+  returnNote              String?
+  isCurrent               Boolean          @default(true)
+  isDeleted               Boolean          @default(false)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  asset                   Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  allocatedToEmployee     Employee?        @relation("AllocationToEmployee", fields: [allocatedToEmployeeId], references: [id], onDelete: SetNull)
+  allocatedToDepartment   Department?      @relation("AllocationToDepartment", fields: [allocatedToDepartmentId], references: [id], onDelete: SetNull)
+  allocatedBy             Employee?        @relation("AllocationCreatedBy", fields: [allocatedById], references: [id], onDelete: SetNull)
+  approvedBy              Employee?        @relation("AllocationApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  transferRequests        AssetTransferRequest[]
+  returnRecord            AssetReturn?
+  history                 AllocationHistory[]
+
+  @@index([assetId, status])
+  @@index([allocatedToEmployeeId])
+  @@index([allocatedToDepartmentId])
+  @@index([allocatedById])
+  @@index([approvedById])
+  @@index([expectedReturnDate])
+  @@index([isCurrent, isDeleted])
+  @@map("asset_allocations")
+}
+
+model AssetTransferRequest {
+  id                  String                 @id @default(cuid())
+  assetId             String
+  currentAllocationId String?
+  requestedById       String
+  fromEmployeeId      String?
+  fromDepartmentId    String?
+  toEmployeeId        String?
+  toDepartmentId      String?
+  status              TransferRequestStatus  @default(PENDING)
+  reason              String
+  decisionNote        String?
+  reviewedById        String?
+  requestedAt         DateTime               @default(now())
+  reviewedAt          DateTime?
+  completedAt         DateTime?
+  isDeleted           Boolean                @default(false)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  asset               Asset                  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  currentAllocation   AssetAllocation?       @relation(fields: [currentAllocationId], references: [id], onDelete: SetNull)
+
+  requestedBy         Employee               @relation("TransferRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  fromEmployee        Employee?              @relation("TransferFromEmployee", fields: [fromEmployeeId], references: [id], onDelete: SetNull)
+  fromDepartment      Department?            @relation("TransferFromDepartment", fields: [fromDepartmentId], references: [id], onDelete: SetNull)
+  toEmployee          Employee?              @relation("TransferToEmployee", fields: [toEmployeeId], references: [id], onDelete: SetNull)
+  toDepartment        Department?            @relation("TransferToDepartment", fields: [toDepartmentId], references: [id], onDelete: SetNull)
+  reviewedBy          Employee?              @relation("TransferReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([assetId, status])
+  @@index([currentAllocationId])
+  @@index([requestedById])
+  @@index([fromEmployeeId])
+  @@index([fromDepartmentId])
+  @@index([toEmployeeId])
+  @@index([toDepartmentId])
+  @@index([reviewedById])
+  @@index([requestedAt])
+  @@index([status, isDeleted])
+  @@map("asset_transfer_requests")
+}
+
+model AssetReturn {
+  id                String          @id @default(cuid())
+  assetAllocationId String          @unique
+  returnedById      String?
+  receivedById      String?
+  status            ReturnStatus    @default(PENDING_INSPECTION)
+  conditionOnReturn AssetCondition?
+  conditionNotes    String?
+  inspectionNotes   String?
+  returnRequestedAt DateTime        @default(now())
+  returnedAt        DateTime?
+  inspectedAt       DateTime?
+  approvedAt        DateTime?
+  rejectedAt        DateTime?
+  isDeleted         Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  assetAllocation   AssetAllocation @relation(fields: [assetAllocationId], references: [id], onDelete: Cascade)
+  returnedBy        Employee?       @relation("ReturnSubmittedBy", fields: [returnedById], references: [id], onDelete: SetNull)
+  receivedBy        Employee?       @relation("ReturnReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+
+  @@index([returnedById])
+  @@index([receivedById])
+  @@index([returnedAt])
+  @@index([status, isDeleted])
+  @@map("asset_returns")
+}
+
+model AllocationHistory {
+  id             String                  @id @default(cuid())
+  allocationId   String
+  event          AllocationHistoryEvent
+  actorId        String?
+  previousStatus AllocationStatus?
+  newStatus      AllocationStatus?
+  note           String?
+  metadata       Json?
+  happenedAt     DateTime                @default(now())
+  isDeleted      Boolean                 @default(false)
+  createdAt      DateTime                @default(now())
+
+  allocation     AssetAllocation         @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+  actor          Employee?               @relation("AllocationHistoryActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([allocationId, happenedAt])
+  @@index([actorId])
+  @@index([event, isDeleted])
+  @@map("allocation_history")
+}
+
+// =====================================================================
+// Part 4: Resource Booking
+// =====================================================================
+
+enum BookingStatus {
+  PENDING
+  UPCOMING
+  ONGOING
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum BookingType {
+  ROOM
+  VEHICLE
+  EQUIPMENT
+  SPACE
+  OTHER
+}
+
+enum BookingAudience {
+  INDIVIDUAL
+  DEPARTMENT
+}
+
+model ResourceBooking {
+  id                    String          @id @default(cuid())
+  assetId               String
+  bookedById            String
+  bookedForDepartmentId String?
+  approvedById          String?
+  title                 String
+  purpose               BookingType     @default(OTHER)
+  audience              BookingAudience @default(INDIVIDUAL)
+  status                BookingStatus   @default(PENDING)
+
+  startAt               DateTime
+  endAt                 DateTime
+
+  locationNote          String?
+  notes                 String?
+  cancellationReason    String?
+  rescheduleReason      String?
+  cancelledAt           DateTime?
+  completedAt           DateTime?
+  rejectedAt            DateTime?
+  approvedAt            DateTime?
+
+  isDeleted             Boolean         @default(false)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  asset                 Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  bookedBy              Employee        @relation("BookingCreatedBy", fields: [bookedById], references: [id], onDelete: Restrict)
+  bookedForDepartment   Department?     @relation(fields: [bookedForDepartmentId], references: [id], onDelete: SetNull)
+  approvedBy            Employee?       @relation("BookingApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([assetId, startAt, endAt])
+  @@index([bookedById])
+  @@index([bookedForDepartmentId])
+  @@index([approvedById])
+  @@index([startAt])
+  @@index([endAt])
+  @@index([status, isDeleted])
+  @@map("resource_bookings")
+}
+
+// =====================================================================
+// Part 5: Maintenance Management
+// =====================================================================
+
+enum MaintenancePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MaintenanceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  TECHNICIAN_ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  CANCELLED
+}
+
+enum MaintenanceHistoryEvent {
+  REQUESTED
+  APPROVED
+  REJECTED
+  TECHNICIAN_ASSIGNED
+  STARTED
+  RESOLVED
+  CANCELLED
+  STATUS_CHANGED
+  NOTE_ADDED
+}
+
+model MaintenanceRequest {
+  id                   String              @id @default(cuid())
+  assetId              String
+  requestedById        String
+  approvedById         String?
+  assignedTechnicianId String?
+  priority             MaintenancePriority @default(MEDIUM)
+  status               MaintenanceStatus   @default(PENDING)
+
+  issueTitle           String
+  issueDescription     String
+  approvalNote         String?
+  rejectionReason      String?
+  resolutionNote       String?
+  technicianNote       String?
+
+  requestedAt          DateTime            @default(now())
+  approvedAt           DateTime?
+  rejectedAt           DateTime?
+  technicianAssignedAt DateTime?
+  startedAt            DateTime?
+  resolvedAt           DateTime?
+  cancelledAt          DateTime?
+
+  isDeleted            Boolean             @default(false)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  asset                Asset               @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  requestedBy          Employee            @relation("MaintenanceRaisedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  approvedBy           Employee?           @relation("MaintenanceApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  assignedTechnician   Employee?           @relation("MaintenanceTechnician", fields: [assignedTechnicianId], references: [id], onDelete: SetNull)
+
+  attachments          MaintenanceAttachment[]
+  history              MaintenanceHistory[]
+
+  @@index([assetId, status])
+  @@index([requestedById])
+  @@index([approvedById])
+  @@index([assignedTechnicianId])
+  @@index([priority])
+  @@index([requestedAt])
+  @@index([status, isDeleted])
+  @@map("maintenance_requests")
+}
+
+model MaintenanceAttachment {
+  id                   String              @id @default(cuid())
+  maintenanceRequestId String
+  url                  String
+  fileName             String?
+  mimeType             String?
+  fileSize             Int?
+  caption              String?
+  isPrimary            Boolean             @default(false)
+  sortOrder            Int                 @default(0)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  maintenanceRequest   MaintenanceRequest  @relation(fields: [maintenanceRequestId], references: [id], onDelete: Cascade)
+
+  @@index([maintenanceRequestId])
+  @@index([isPrimary])
+  @@index([sortOrder])
+  @@map("maintenance_attachments")
+}
+
+model MaintenanceHistory {
+  id                   String                   @id @default(cuid())
+  maintenanceRequestId String
+  event                MaintenanceHistoryEvent
+  actorId              String?
+  previousStatus       MaintenanceStatus?
+  newStatus            MaintenanceStatus?
+  note                 String?
+  metadata             Json?
+  happenedAt           DateTime                 @default(now())
+  isDeleted            Boolean                  @default(false)
+
+  maintenanceRequest   MaintenanceRequest       @relation(fields: [maintenanceRequestId], references: [id], onDelete: Cascade)
+  actor                Employee?                @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([maintenanceRequestId, happenedAt])
+  @@index([actorId])
+  @@index([event, isDeleted])
+  @@map("maintenance_history")
+}
+
+// =====================================================================
+// Part 6: Audit Cycles
+// =====================================================================
+
+enum AuditCycleStatus {
+  DRAFT
+  SCHEDULED
+  IN_PROGRESS
+  CLOSED
+  CANCELLED
+}
+
+enum AuditScopeType {
+  DEPARTMENT
+  LOCATION
+  CUSTOM
+}
+
+enum AuditAssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  SUBMITTED
+  VERIFIED
+  REJECTED
+}
+
+enum AuditFinding {
+  VERIFIED
+  MISSING
+  DAMAGED
+}
+
+enum AuditDiscrepancyStatus {
+  OPEN
+  CONFIRMED
+  DISMISSED
+  RESOLVED
+}
+
+enum AuditDiscrepancySeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model AuditCycle {
+  id               String           @id @default(cuid())
+  title            String
+  description      String?
+  scopeType        AuditScopeType   @default(DEPARTMENT)
+  departmentId     String?
+  locationFilter   String?
+  startDate        DateTime
+  endDate          DateTime
+  status           AuditCycleStatus @default(DRAFT)
+  createdById      String?
+  submittedAt      DateTime?
+  closedAt         DateTime?
+  cancelledAt      DateTime?
+  cancellationNote String?
+  isDeleted        Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  department       Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdBy        Employee?        @relation("AuditCycleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  assignments      AuditAssignment[]
+  results          AuditResult[]
+  discrepancies    AuditDiscrepancy[]
+
+  @@index([departmentId])
+  @@index([scopeType])
+  @@index([createdById])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([status, isDeleted])
+  @@map("audit_cycles")
+}
+
+model AuditAssignment {
+  id           String                 @id @default(cuid())
+  cycleId      String
+  auditorId    String
+  assignedById String?
+  status       AuditAssignmentStatus  @default(ASSIGNED)
+  assignedAt   DateTime               @default(now())
+  startedAt    DateTime?
+  submittedAt  DateTime?
+  verifiedAt   DateTime?
+  notes        String?
+  isDeleted    Boolean                @default(false)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  cycle        AuditCycle             @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  auditor      Employee               @relation("AuditAssignee", fields: [auditorId], references: [id], onDelete: Restrict)
+  assignedBy   Employee?              @relation("AuditAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([cycleId, auditorId])
+  @@index([cycleId])
+  @@index([auditorId])
+  @@index([assignedById])
+  @@index([status, isDeleted])
+  @@map("audit_assignments")
+}
+
+model AuditResult {
+  id                String          @id @default(cuid())
+  cycleId           String
+  assetId           String
+  auditorId         String?
+  finding           AuditFinding
+  observedCondition AssetCondition?
+  observedStatus    AssetStatus?
+  observedLocation  String?
+  notes             String?
+  submittedAt       DateTime        @default(now())
+  reviewedAt        DateTime?
+  reviewedById      String?
+  isDeleted         Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  cycle             AuditCycle      @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  asset             Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  auditor           Employee?       @relation("AuditResultAuditor", fields: [auditorId], references: [id], onDelete: SetNull)
+  reviewedBy        Employee?       @relation("AuditResultReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  discrepancy       AuditDiscrepancy?
+
+  @@unique([cycleId, assetId])
+  @@index([cycleId])
+  @@index([assetId])
+  @@index([auditorId])
+  @@index([reviewedById])
+  @@index([finding, isDeleted])
+  @@map("audit_results")
+}
+
+model AuditDiscrepancy {
+  id             String                   @id @default(cuid())
+  cycleId        String
+  assetId        String
+  auditResultId  String?                  @unique
+  status         AuditDiscrepancyStatus   @default(OPEN)
+  severity       AuditDiscrepancySeverity @default(MEDIUM)
+  title          String
+  description    String?
+  resolutionNote String?
+  resolvedById   String?
+  resolvedAt     DateTime?
+  isDeleted      Boolean                  @default(false)
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  cycle          AuditCycle               @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  asset          Asset                    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  auditResult    AuditResult?             @relation(fields: [auditResultId], references: [id], onDelete: SetNull)
+  resolvedBy     Employee?                @relation("AuditDiscrepancyResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([cycleId])
+  @@index([assetId])
+  @@index([severity])
+  @@index([resolvedById])
+  @@index([status, isDeleted])
+  @@map("audit_discrepancies")
+}
+
+// =====================================================================
+// Part 7: Notifications, Activity Logs, Dashboard Helpers
+// =====================================================================
+
+enum NotificationType {
+  GENERAL
+  ASSET_ASSIGNED
+  ASSET_RETURNED
+  TRANSFER_REQUESTED
+  TRANSFER_APPROVED
+  TRANSFER_REJECTED
+  MAINTENANCE_REQUESTED
+  MAINTENANCE_APPROVED
+  MAINTENANCE_REJECTED
+  MAINTENANCE_RESOLVED
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  BOOKING_REMINDER
+  OVERDUE_RETURN
+  AUDIT_ASSIGNED
+  AUDIT_DISCREPANCY
+  SYSTEM
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+enum ActivityActionType {
+  CREATED
+  UPDATED
+  DELETED
+  ASSIGNED
+  APPROVED
+  REJECTED
+  BOOKED
+  RETURNED
+  TRANSFER_REQUESTED
+  TRANSFER_APPROVED
+  TRANSFER_REJECTED
+  MAINTENANCE_REQUESTED
+  MAINTENANCE_APPROVED
+  MAINTENANCE_REJECTED
+  AUDIT_CREATED
+  AUDIT_SUBMITTED
+  AUDIT_CLOSED
+  LOGIN
+  LOGOUT
+  SYSTEM_EVENT
+}
+
+enum DashboardScope {
+  GLOBAL
+  DEPARTMENT
+  EMPLOYEE
+}
+
+model Notification {
+  id              String                @id @default(cuid())
+  recipientUserId String
+  type            NotificationType      @default(GENERAL)
+  priority        NotificationPriority  @default(MEDIUM)
+  status          NotificationStatus    @default(UNREAD)
+
+  title           String
+  message         String
+  actionUrl       String?
+  entityType      String?
+  entityId        String?
+  payload         Json?
+
+  sentAt          DateTime              @default(now())
+  readAt          DateTime?
+  archivedAt      DateTime?
+  expiresAt       DateTime?
+  isDeleted       Boolean               @default(false)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  recipient       User                  @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@index([recipientUserId, status, isDeleted])
+  @@index([recipientUserId, type])
+  @@index([priority])
+  @@index([sentAt])
+  @@index([entityType, entityId])
+  @@map("notifications")
+}
+
+model ActivityLog {
+  id              String              @id @default(cuid())
+  actorUserId     String?
+  actorEmployeeId String?
+  action          ActivityActionType
+  entityType      String
+  entityId        String?
+  description     String
+  beforeData      Json?
+  afterData       Json?
+  metadata        Json?
+  ipAddress       String?
+  userAgent       String?
+  occurredAt      DateTime            @default(now())
+  isDeleted       Boolean             @default(false)
+  createdAt       DateTime            @default(now())
+
+  actorUser       User?               @relation("ActivityLogActorUser", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorEmployee   Employee?           @relation("ActivityLogActorEmployee", fields: [actorEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([actorEmployeeId])
+  @@index([entityType, entityId])
+  @@index([occurredAt])
+  @@index([action, isDeleted])
+  @@map("activity_logs")
+}
+
+model DashboardKpiSnapshot {
+  id               String         @id @default(cuid())
+  scope            DashboardScope @default(GLOBAL)
+  scopeKey         String
+  departmentId     String?
+  employeeId       String?
+
+  snapshotDate     DateTime
+  assetsAvailable  Int            @default(0)
+  assetsAllocated  Int            @default(0)
+  maintenanceToday Int            @default(0)
+  activeBookings   Int            @default(0)
+  pendingTransfers Int            @default(0)
+  upcomingReturns  Int            @default(0)
+  overdueReturns   Int            @default(0)
+
+  extraMetrics     Json?
+  isDeleted        Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  department       Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  employee         Employee?      @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@unique([scopeKey, snapshotDate])
+  @@index([departmentId])
+  @@index([employeeId])
+  @@index([snapshotDate])
+  @@index([scope, isDeleted])
+  @@map("dashboard_kpi_snapshots")
+}
+
+// =====================================================================
+// Part 8: Final Cleanup / Optional Helpers
+// =====================================================================
+
+enum CustomFieldDataType {
+  STRING
+  NUMBER
+  BOOLEAN
+  DATE
+  JSON
+}
+
+enum OutboxEventStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+model AssetCategoryFieldDefinition {
+  id         String              @id @default(cuid())
+  categoryId String
+  key        String
+  label      String
+  dataType   CustomFieldDataType
+  isRequired Boolean             @default(false)
+  isActive   Boolean             @default(true)
+  sortOrder  Int                 @default(0)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  category   AssetCategory                 @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  values     AssetCategoryFieldValue[]
+
+  @@unique([categoryId, key])
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("asset_category_field_definitions")
+}
+
+model AssetCategoryFieldValue {
+  id                 String                        @id @default(cuid())
+  assetId            String
+  fieldDefinitionId  String
+
+  valueString        String?
+  valueNumber        Decimal?                      @db.Decimal(18, 4)
+  valueBoolean       Boolean?
+  valueDate          DateTime?
+  valueJson          Json?
+
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+
+  asset              Asset                         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  fieldDefinition    AssetCategoryFieldDefinition   @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, fieldDefinitionId])
+  @@index([assetId])
+  @@index([fieldDefinitionId])
+  @@map("asset_category_field_values")
+}
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("system_settings")
+}
+
+model OutboxEvent {
+  id            String            @id @default(cuid())
+  eventType     String
+  aggregateType String
+  aggregateId   String
+  payload       Json
+  status        OutboxEventStatus @default(PENDING)
+  attempts      Int               @default(0)
+  lastError     String?
+  availableAt   DateTime          @default(now())
+  processedAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([status, availableAt])
+  @@index([aggregateType, aggregateId])
+  @@index([eventType])
+  @@map("outbox_events")
 }
