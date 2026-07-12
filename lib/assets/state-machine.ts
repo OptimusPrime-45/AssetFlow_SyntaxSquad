@@ -1,4 +1,5 @@
 import type { Tx } from '@/lib/tx';
+import { currentAllocation, holderName } from '@/lib/allocations/current';
 import type {
     AssetStatus,
     AssetCondition,
@@ -61,6 +62,26 @@ export function allowedTransitions(from: AssetStatus): readonly AssetStatus[] {
     return ASSET_TRANSITIONS[from];
 }
 
+/**
+ * Thrown when an asset is sent back to AVAILABLE while someone still holds it.
+ *
+ * This is what keeps `status = ALLOCATED` and "has a current allocation" from
+ * drifting apart. Without it, an Asset Manager could flip a held asset to
+ * AVAILABLE, leaving the allocation row live — and the next allocation would
+ * quietly evict the holder instead of offering a transfer.
+ *
+ * The legitimate ways out of custody (return approval, revoke) close the
+ * allocation first, so they pass this check.
+ */
+export class ActiveAllocationError extends Error {
+    constructor(readonly holder: string, readonly allocationId: string) {
+        super(
+            `Asset is still held by ${holder}. Process the return or revoke the allocation instead of changing the status directly.`,
+        );
+        this.name = 'ActiveAllocationError';
+    }
+}
+
 export class IllegalTransitionError extends Error {
     constructor(
         readonly from: AssetStatus,
@@ -112,6 +133,18 @@ export async function applyStatusChange(tx: Tx, change: StatusChange) {
     const from = asset.status;
     if (!canTransition(from, to)) {
         throw new IllegalTransitionError(from, to);
+    }
+
+    // Returning an asset to the shelf while someone still holds it would leave a
+    // live allocation pointing at an AVAILABLE asset — the exact drift that lets
+    // a later allocation silently steal it. Callers that legitimately end custody
+    // (return approval, revoke, transfer completion) close the allocation first,
+    // so they never trip this.
+    if (to === 'AVAILABLE') {
+        const held = await currentAllocation(tx, assetId);
+        if (held) {
+            throw new ActiveAllocationError(holderName(held), held.id);
+        }
     }
 
     const toCondition = condition ?? asset.condition;
