@@ -4,6 +4,7 @@ import { checkAuth } from '@/lib/auth/rbac';
 import {
   applyStatusChange,
   allowedTransitions,
+  ActiveAllocationError,
   IllegalTransitionError,
   MANUAL_REASONS,
 } from '@/lib/assets/state-machine';
@@ -89,6 +90,19 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     return NextResponse.json({ success: true, asset: updatedAsset });
   } catch (error: any) {
+    // Trying to shelve an asset someone still holds. Point them at the return
+    // flow rather than letting them orphan a live allocation.
+    if (error instanceof ActiveAllocationError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message,
+          conflict: { heldBy: error.holder, allocationId: error.allocationId },
+        },
+        { status: 409 }
+      );
+    }
+
     // An illegal move is the caller's mistake, not a server fault. Tell them what
     // they asked for and what they could have asked for instead.
     if (error instanceof IllegalTransitionError) {
