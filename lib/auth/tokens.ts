@@ -1,6 +1,18 @@
 import crypto from 'crypto';
 
-const SECRET = process.env.JWT_SECRET || 'some-secure-default-secret-key-12345';
+// Fails closed. The old `|| 'some-secure-default-secret-key-12345'` meant that an
+// unset JWT_SECRET silently signed tokens with a value committed to the repo —
+// anyone could then forge a verification token for any userId and activate an
+// arbitrary account.
+function requireSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not set — refusing to sign tokens with a default.');
+  }
+  return secret;
+}
+
+const SECRET = requireSecret();
 
 /**
  * Generates an email verification token signed using HMAC-SHA256.

@@ -1,4 +1,5 @@
 import type { Tx } from '@/lib/tx';
+import { currentAllocation, holderName } from '@/lib/allocations/current';
 import type {
     AssetStatus,
     AssetCondition,
@@ -61,6 +62,26 @@ export function allowedTransitions(from: AssetStatus): readonly AssetStatus[] {
     return ASSET_TRANSITIONS[from];
 }
 
+/**
+ * Thrown when an asset is sent back to AVAILABLE while someone still holds it.
+ *
+ * This is what keeps `status = ALLOCATED` and "has a current allocation" from
+ * drifting apart. Without it, an Asset Manager could flip a held asset to
+ * AVAILABLE, leaving the allocation row live — and the next allocation would
+ * quietly evict the holder instead of offering a transfer.
+ *
+ * The legitimate ways out of custody (return approval, revoke) close the
+ * allocation first, so they pass this check.
+ */
+export class ActiveAllocationError extends Error {
+    constructor(readonly holder: string, readonly allocationId: string) {
+        super(
+            `Asset is still held by ${holder}. Process the return or revoke the allocation instead of changing the status directly.`,
+        );
+        this.name = 'ActiveAllocationError';
+    }
+}
+
 export class IllegalTransitionError extends Error {
     constructor(
         readonly from: AssetStatus,
@@ -89,6 +110,56 @@ type StatusChange = {
     note?: string | null;
 };
 
+type ConditionChange = {
+    assetId: string;
+    condition: AssetCondition;
+    reason: AssetStatusChangeReason;
+    changedById?: string | null;
+    note?: string | null;
+};
+
+/**
+ * Changes an asset's condition without moving its status, still recording the
+ * change in AssetStatusHistory.
+ *
+ * Needed because applyStatusChange() rejects a no-op transition (X -> X is never
+ * in the table), but an audit that finds a laptop DAMAGED-but-present must record
+ * the damage without pretending the asset moved anywhere. Writing the condition
+ * with a bare asset.update() would leave no trail at all.
+ */
+export async function applyConditionChange(tx: Tx, change: ConditionChange) {
+    const { assetId, condition, reason, changedById = null, note = null } = change;
+
+    const asset = await tx.asset.findUnique({
+        where: { id: assetId },
+        select: { status: true, condition: true, isDeleted: true },
+    });
+
+    if (!asset || asset.isDeleted) {
+        throw new Error(`Asset ${assetId} not found`);
+    }
+
+    const updated = await tx.asset.update({
+        where: { id: assetId },
+        data: { condition },
+    });
+
+    await tx.assetStatusHistory.create({
+        data: {
+            assetId,
+            fromStatus: asset.status,
+            toStatus: asset.status, // unchanged — this is a condition-only event
+            fromCondition: asset.condition,
+            toCondition: condition,
+            reason,
+            note,
+            changedById,
+        },
+    });
+
+    return updated;
+}
+
 /**
  * Moves an asset to a new status, enforcing the transition table and recording
  * the move in AssetStatusHistory. Throws IllegalTransitionError if the move
@@ -112,6 +183,18 @@ export async function applyStatusChange(tx: Tx, change: StatusChange) {
     const from = asset.status;
     if (!canTransition(from, to)) {
         throw new IllegalTransitionError(from, to);
+    }
+
+    // Returning an asset to the shelf while someone still holds it would leave a
+    // live allocation pointing at an AVAILABLE asset — the exact drift that lets
+    // a later allocation silently steal it. Callers that legitimately end custody
+    // (return approval, revoke, transfer completion) close the allocation first,
+    // so they never trip this.
+    if (to === 'AVAILABLE') {
+        const held = await currentAllocation(tx, assetId);
+        if (held) {
+            throw new ActiveAllocationError(holderName(held), held.id);
+        }
     }
 
     const toCondition = condition ?? asset.condition;

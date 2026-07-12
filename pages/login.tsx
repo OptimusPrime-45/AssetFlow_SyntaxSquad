@@ -1,20 +1,29 @@
-"use client";
-
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { useAuth } from "@/lib/context/AuthContext";
 
 export default function Login() {
   const router = useRouter();
+  const { login } = useAuth();
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate login and redirect to dashboard
-    router.push("/dashboard");
+    setSubmitting(true);
+    setFormError(null);
+
+    const result = await login(email, password);
+    setSubmitting(false);
+
+    if (!result.success) {
+      setFormError(result.error || "Invalid email or password");
+    }
   };
 
   return (
@@ -49,6 +58,12 @@ export default function Login() {
           {/* Login Card */}
           <div className="login-card p-10 bg-white border border-border-hairline rounded-none transition-all duration-300">
             <form onSubmit={handleSubmit} className="space-y-8">
+              {formError && (
+                <div className="p-4 bg-error-container text-on-error-container font-label-mono text-xs uppercase tracking-wider">
+                  {formError}
+                </div>
+              )}
+
               {/* Email Field */}
               <div className="relative">
                 <label
@@ -108,10 +123,11 @@ export default function Login() {
               {/* Actions */}
               <div className="pt-4 space-y-6">
                 <button
-                  className="w-full bg-primary text-on-primary py-4 font-label-mono text-label-mono uppercase tracking-widest hover:bg-sage-hover transition-colors duration-200 rounded-none cursor-pointer text-xs"
+                  disabled={submitting}
+                  className="w-full bg-primary text-on-primary py-4 font-label-mono text-label-mono uppercase tracking-widest hover:bg-sage-hover transition-colors duration-200 rounded-none cursor-pointer text-xs disabled:opacity-50"
                   type="submit"
                 >
-                  Execute Login
+                  {submitting ? "Executing Auth..." : "Execute Login"}
                 </button>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">

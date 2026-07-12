@@ -1,5 +1,6 @@
 import type { AppProps } from "next/app";
 import { Inter, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
+import { AuthProvider } from "@/lib/context/AuthContext";
 import "@/styles/globals.css";
 
 const inter = Inter({
@@ -26,7 +27,9 @@ export default function App({ Component, pageProps }: AppProps) {
     <main
       className={`${inter.variable} ${jetbrainsMono.variable} ${sourceSerif4.variable} h-full antialiased font-body-md bg-background text-on-background`}
     >
-      <Component {...pageProps} />
+      <AuthProvider>
+        <Component {...pageProps} />
+      </AuthProvider>
     </main>
   );
 }

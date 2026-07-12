@@ -2,19 +2,30 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { checkAuth } from '@/lib/auth/rbac';
 
+/**
+ * Excel and Sheets treat a cell starting with = + - or @ as a formula, so a
+ * booking titled `=cmd|'/c calc'!A0` executes when the export is opened. Prefixing
+ * with an apostrophe forces the spreadsheet to read it as text; the apostrophe
+ * itself isn't displayed.
+ */
+function neutralizeFormula(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
 function jsonToCsv(items: any[], headers: string[], keys: string[]): string {
   const csvRows = [];
   csvRows.push(headers.join(','));
-  
+
   for (const item of items) {
     const values = keys.map((key) => {
       const val = item[key];
-      const escaped = ('' + (val !== null && val !== undefined ? val : '')).replace(/"/g, '""');
+      const raw = '' + (val !== null && val !== undefined ? val : '');
+      const escaped = neutralizeFormula(raw).replace(/"/g, '""');
       return `"${escaped}"`;
     });
     csvRows.push(values.join(','));
   }
-  
+
   return csvRows.join('\n');
 }
 

@@ -3,14 +3,30 @@ import { prisma } from '@/lib/prisma';
 import { checkAuth } from '@/lib/auth/rbac';
 
 export async function GET() {
-  const auth = await checkAuth(['ADMIN', 'ASSET_MANAGER']);
+  // The README grants Dept Heads exactly one report: the allocation summary for
+  // their own department. They were 403'd from it. Adding the role alone would
+  // have handed them every department, so the scope filter below goes in with it.
+  const auth = await checkAuth(['ADMIN', 'ASSET_MANAGER', 'DEPARTMENT_HEAD']);
   if ('error' in auth) {
     return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
   }
 
+  const isDeptHead = auth.user.role === 'DEPARTMENT_HEAD';
+  const ownDepartmentId = auth.employee?.departmentId ?? null;
+
+  if (isDeptHead && !ownDepartmentId) {
+    return NextResponse.json(
+      { success: false, error: 'You are not assigned to a department' },
+      { status: 403 }
+    );
+  }
+
   try {
     const departments = await prisma.department.findMany({
-      where: { isDeleted: false },
+      where: {
+        isDeleted: false,
+        ...(isDeptHead ? { id: ownDepartmentId! } : {}),
+      },
       include: {
         assets: {
           where: { isDeleted: false },

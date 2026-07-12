@@ -19,6 +19,7 @@
       }
     ],
     "paths": {
+      "@/app/generated/prisma/enums": ["./app/generated/prisma/index"],
       "@/*": ["./*"]
     }
   },

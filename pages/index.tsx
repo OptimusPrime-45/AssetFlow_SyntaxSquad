@@ -1,360 +1,278 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import Link from "next/link";
 
 export default function Home() {
-  const primaryBtnRef = useRef<HTMLButtonElement | null>(null);
-  const statsSectionRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    // 1. Mousemove glow effect on primary button
-    const primaryBtn = primaryBtnRef.current;
-    if (primaryBtn) {
-      const handleMouseMove = (e: MouseEvent) => {
-        const rect = primaryBtn.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        primaryBtn.style.setProperty("--x", `${x}px`);
-        primaryBtn.style.setProperty("--y", `${y}px`);
-      };
-      primaryBtn.addEventListener("mousemove", handleMouseMove);
-      return () => {
-        primaryBtn.removeEventListener("mousemove", handleMouseMove);
-      };
-    }
-  }, []);
-
-  useEffect(() => {
-    // 2. Scroll reveal for stats
-    const observerOptions = {
-      threshold: 0.2,
-    };
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("animate-in");
-          // Simple count-up animation trigger for demo
-          const el = entry.target as HTMLElement;
-          const target = el.getAttribute("data-target");
-          if (target) {
-            let count = 0;
-            const targetVal = parseFloat(target.replace(/[^0-9.]/g, ""));
-            const suffix = target.replace(/[0-9.]/g, "");
-            const isFloat = target.includes(".");
-            const increment = targetVal / 50;
-            const updateCount = () => {
-              count += increment;
-              if (count < targetVal) {
-                el.innerText = (isFloat ? count.toFixed(1) : Math.floor(count).toString()) + suffix;
-                requestAnimationFrame(updateCount);
-              } else {
-                el.innerText = target;
-              }
-            };
-            updateCount();
-          }
-          observer.unobserve(entry.target);
-        }
-      });
-    }, observerOptions);
-
-    const statsElements = document.querySelectorAll(".font-stat-kpi");
-    statsElements.forEach((el) => observer.observe(el));
-
-    return () => {
-      statsElements.forEach((el) => observer.unobserve(el));
-    };
-  }, []);
-
   return (
-    <div className="font-body-md text-on-background bg-background selection:bg-primary-fixed selection:text-on-primary-fixed">
-      {/* TopNavBar */}
-      <nav className="w-full top-0 sticky bg-background border-b border-border-hairline z-50 flex justify-between items-center h-20 px-container-padding max-w-full mx-auto">
-        <div className="font-display-lg text-display-lg font-bold tracking-tighter text-on-surface">
+    <div className="font-body-md text-on-surface bg-background selection:bg-primary-fixed selection:text-on-primary-fixed min-h-screen flex flex-col justify-between">
+      {/* Top Navbar */}
+      <nav className="w-full top-0 sticky bg-background border-b border-border-hairline z-50 flex justify-between items-center h-20 px-6 md:px-16 max-w-full mx-auto">
+        <div className="font-display-lg text-[22px] font-bold tracking-tight text-on-surface">
           AssetFlow
         </div>
-        <div className="hidden md:flex items-center space-x-8">
+        <div className="hidden md:flex items-center space-x-12">
           <Link
-            className="font-body-md text-body-md text-primary font-bold border-b border-primary hover:text-primary transition-colors duration-200"
+            className="font-body-md text-sm text-on-surface font-semibold hover:text-primary transition-colors duration-200"
             href="#"
           >
             Solutions
           </Link>
           <Link
-            className="font-body-md text-body-md text-secondary hover:text-primary transition-colors duration-200"
+            className="font-body-md text-sm text-secondary hover:text-primary transition-colors duration-200"
             href="#"
           >
             Framework
           </Link>
           <Link
-            className="font-body-md text-body-md text-secondary hover:text-primary transition-colors duration-200"
+            className="font-body-md text-sm text-secondary hover:text-primary transition-colors duration-200"
             href="#"
           >
             Journal
           </Link>
           <Link
-            className="font-body-md text-body-md text-secondary hover:text-primary transition-colors duration-200"
+            className="font-body-md text-sm text-secondary hover:text-primary transition-colors duration-200"
             href="#"
           >
             Pricing
           </Link>
         </div>
-        <div className="flex items-center space-x-6">
-          <span className="material-symbols-outlined text-on-surface-variant cursor-pointer">
+        <div className="flex items-center space-x-8">
+          <span className="material-symbols-outlined text-secondary hover:text-primary cursor-pointer text-[20px] transition-colors">
             search
           </span>
           <Link href="/login">
-            <button
-              ref={primaryBtnRef}
-              className="relative overflow-hidden bg-primary text-on-primary px-6 py-2 rounded-none font-label-mono text-label-mono uppercase tracking-widest hover:bg-opacity-90 transition-all cursor-pointer"
-              style={
-                {
-                  "--x": "50%",
-                  "--y": "50%",
-                } as React.CSSProperties
-              }
-            >
+            <button className="bg-primary text-white text-xs px-6 py-3 rounded-none font-label-mono uppercase tracking-widest hover:bg-opacity-90 transition-all cursor-pointer font-semibold">
               Launch App
             </button>
           </Link>
         </div>
       </nav>
 
-      <main>
+      {/* Main Content Area */}
+      <main className="flex-grow">
         {/* Hero Section */}
-        <section className="min-h-[819px] flex flex-col justify-center px-container-padding py-section-margin relative overflow-hidden">
-          <div className="max-w-5xl">
-            <div className="mb-gutter">
-              <span className="font-label-mono text-label-mono text-primary uppercase tracking-[0.2em]">
+        <section className="px-6 md:px-16 pt-24 pb-20 max-w-7xl mx-auto">
+          <div className="max-w-4xl">
+            <div className="mb-6">
+              <span className="font-label-mono text-secondary uppercase tracking-[0.2em] text-xs font-semibold">
                 Institutional Asset Management
               </span>
             </div>
-            <h1 className="font-display-lg text-[80px] leading-[0.95] mb-gutter text-on-surface max-w-4xl font-bold tracking-tight">
-              Track every <span className="font-display-lg-italic italic text-primary font-normal">asset</span> with
+            <h1 className="font-display-lg text-4xl md:text-[68px] leading-[1.05] mb-8 text-on-surface font-bold tracking-tight">
+              Track every <span className="font-display-lg-italic italic text-secondary font-normal font-serif">asset</span> with
               surgical precision.
             </h1>
-            <p className="font-body-lg text-body-lg text-secondary max-w-2xl mb-12">
+            <p className="font-body-lg text-base md:text-[17px] text-secondary max-w-2xl mb-12 leading-relaxed">
               An editorial approach to enterprise workflows. Unified liquidity oversight, automated asset
               reconciliation, and high-fidelity reporting for modern treasuries.
             </p>
-            <div className="flex items-center space-x-gutter">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
               <Link href="/register">
-                <button className="bg-primary text-on-primary px-10 py-4 rounded-none font-label-mono text-label-mono uppercase tracking-widest hover:bg-opacity-90 transition-all flex items-center group cursor-pointer">
+                <button className="bg-primary text-white px-8 py-4 rounded-none font-label-mono text-xs uppercase tracking-widest hover:bg-opacity-90 transition-all flex items-center justify-center gap-3 cursor-pointer font-semibold">
                   Begin Onboarding
-                  <span className="material-symbols-outlined ml-2 group-hover:translate-x-1 transition-transform duration-200">
-                    arrow_forward
-                  </span>
+                  <span className="material-symbols-outlined text-sm">arrow_forward</span>
                 </button>
               </Link>
-              <button className="border border-border-hairline text-on-surface px-10 py-4 rounded-none font-label-mono text-label-mono uppercase tracking-widest hover:border-primary transition-all cursor-pointer">
-                View Documentation
+              <button className="border border-border-hairline text-secondary hover:text-on-surface hover:border-primary px-8 py-4 rounded-none font-label-mono text-xs uppercase tracking-widest transition-all cursor-pointer bg-transparent">
+                Read Documentation
               </button>
             </div>
           </div>
-          {/* Visual Anchor */}
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1/3 h-full hidden lg:block opacity-20 pointer-events-none">
-            {/* Visual placeholder matching style */}
-          </div>
         </section>
 
-        {/* Verified Status Strip */}
-        <div className="border-y border-border-hairline bg-surface-container-low py-8 px-container-padding">
-          <div className="flex flex-wrap justify-between items-center gap-gutter opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
-            <div className="flex items-center space-x-2">
-              <span className="material-symbols-outlined text-on-surface">verified_user</span>
-              <span className="font-label-mono text-label-mono uppercase">SOC2 TYPE II COMPLIANT</span>
+        {/* Compliance & Trust Strip */}
+        <div className="border-y border-border-hairline bg-[#f4f4f2]/40 py-6 px-6 md:px-16">
+          <div className="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-6 text-secondary text-xs font-label-mono">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-secondary text-lg">verified_user</span>
+              <span className="uppercase tracking-wider">SOC2 TYPE II COMPLIANT</span>
             </div>
-            <div className="flex items-center space-x-2">
-              <span className="material-symbols-outlined text-on-surface">security</span>
-              <span className="font-label-mono text-label-mono uppercase">ISO 27001 CERTIFIED</span>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-secondary text-lg">verified</span>
+              <span className="uppercase tracking-wider">ESM STORE CERTIFIED</span>
             </div>
-            <div className="flex items-center space-x-2">
-              <span className="material-symbols-outlined text-on-surface">encrypted</span>
-              <span className="font-label-mono text-label-mono uppercase">AES-256 ENCRYPTED</span>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-secondary text-lg">lock</span>
+              <span className="uppercase tracking-wider">AES-256 ENCRYPTED</span>
             </div>
-            <div className="flex items-center space-x-2">
-              <span className="material-symbols-outlined text-on-surface">account_balance</span>
-              <span className="font-label-mono text-label-mono uppercase">SEC REGISTERED AGENT</span>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-secondary text-lg">account_balance</span>
+              <span className="uppercase tracking-wider">SEC REGISTERED AGENT</span>
             </div>
           </div>
         </div>
 
-        {/* Features Section */}
-        <section className="px-container-padding py-section-margin bg-paper">
-          <div className="mb-section-margin">
-            <div className="flex items-center space-x-4 mb-4">
-              <span className="font-section-number text-section-number text-primary">§ 01</span>
-              <div className="h-px flex-grow bg-border-hairline"></div>
+        {/* Section 01 - Features */}
+        <section className="px-6 md:px-16 py-20 max-w-7xl mx-auto">
+          <div className="mb-16">
+            <div className="flex items-center gap-4 mb-4">
+              <span className="font-section-number text-primary font-semibold text-sm">§ 01</span>
+              <div className="h-px w-12 bg-primary"></div>
             </div>
-            <h2 className="font-display-lg text-display-lg text-on-surface font-bold">
-              The <span className="font-display-lg-italic italic font-normal">Infrastructure</span> of Trust
+            <h2 className="font-display-lg text-3xl md:text-5xl text-on-surface font-bold tracking-tight">
+              The <span className="font-display-lg-italic italic text-secondary font-normal font-serif">Infrastructure</span> of Trust
             </h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {/* Card 1 */}
-            <div className="hover-reveal-card bg-surface border border-border-hairline p-card-padding flex flex-col justify-between aspect-square transition-all duration-300 hover:border-primary cursor-pointer group">
+            <div className="bg-white border border-border-hairline p-8 flex flex-col justify-between h-[360px] transition-all duration-300 hover:border-primary">
               <div>
-                <span className="font-label-mono text-label-mono text-secondary-fixed-dim uppercase mb-4 block">
-                  01 · LIQUIDITY
+                <span className="font-label-mono text-[10px] text-secondary uppercase tracking-widest mb-6 block font-semibold">
+                  01 / LIQUIDITY
                 </span>
-                <h3 className="font-headline-md text-headline-md text-on-surface mb-2 font-bold">
+                <h3 className="font-display-lg text-xl font-bold text-on-surface mb-3 tracking-tight">
                   Real-time Treasury
                 </h3>
-                <p className="text-on-surface-variant text-sm">
-                  Instant visibility into global cash positions with zero-latency reconciliation across 40+ currencies.
+                <p className="text-secondary text-[13px] leading-relaxed">
+                  Instant visibility into global cash positions with zero latency reconciliation across 40+ currencies.
                 </p>
               </div>
-              <div className="flex justify-between items-end">
-                <span className="material-symbols-outlined text-primary text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  payments
-                </span>
-                <span className="material-symbols-outlined hover-reveal-arrow text-primary">
-                  arrow_forward
-                </span>
+              <div>
+                <span className="material-symbols-outlined text-secondary text-2xl">account_balance_wallet</span>
               </div>
             </div>
 
             {/* Card 2 */}
-            <div className="hover-reveal-card bg-surface border border-border-hairline p-card-padding flex flex-col justify-between aspect-square transition-all duration-300 hover:border-primary cursor-pointer group">
+            <div className="bg-white border border-border-hairline p-8 flex flex-col justify-between h-[360px] transition-all duration-300 hover:border-primary">
               <div>
-                <span className="font-label-mono text-label-mono text-secondary-fixed-dim uppercase mb-4 block">
-                  02 · AUTOMATION
+                <span className="font-label-mono text-[10px] text-secondary uppercase tracking-widest mb-6 block font-semibold">
+                  02 / AUTOMATION
                 </span>
-                <h3 className="font-headline-md text-headline-md text-on-surface mb-2 font-bold">
-                  Workflow <span className="italic font-display-lg-italic font-normal">Engines</span>
+                <h3 className="font-display-lg text-xl font-bold text-on-surface mb-3 tracking-tight">
+                  Workflow <span className="font-display-lg-italic italic text-secondary font-normal font-serif font-light">Engines</span>
                 </h3>
-                <p className="text-on-surface-variant text-sm">
-                  Sophisticated smart-routing for cross-border transfers and automated compliance checks.
+                <p className="text-secondary text-[13px] leading-relaxed">
+                  Sophisticated smart routing for cross-border transfers and automated compliance checks.
                 </p>
               </div>
-              <div className="flex justify-between items-end">
-                <span className="material-symbols-outlined text-primary text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  account_tree
-                </span>
-                <span className="material-symbols-outlined hover-reveal-arrow text-primary">
-                  arrow_forward
-                </span>
+              <div>
+                <span className="material-symbols-outlined text-secondary text-2xl">account_tree</span>
               </div>
             </div>
 
             {/* Card 3 */}
-            <div className="hover-reveal-card bg-surface border border-border-hairline p-card-padding flex flex-col justify-between aspect-square transition-all duration-300 hover:border-primary cursor-pointer group">
+            <div className="bg-white border border-border-hairline p-8 flex flex-col justify-between h-[360px] transition-all duration-300 hover:border-primary">
               <div>
-                <span className="font-label-mono text-label-mono text-secondary-fixed-dim uppercase mb-4 block">
-                  03 · INTELLIGENCE
+                <span className="font-label-mono text-[10px] text-secondary uppercase tracking-widest mb-6 block font-semibold">
+                  03 / INTELLIGENCE
                 </span>
-                <h3 className="font-headline-md text-headline-md text-on-surface mb-2 font-bold">
+                <h3 className="font-display-lg text-xl font-bold text-on-surface mb-3 tracking-tight">
                   Predictive Analytics
                 </h3>
-                <p className="text-on-surface-variant text-sm">
+                <p className="text-secondary text-[13px] leading-relaxed">
                   Machine learning models forecasting asset utilization and capital requirements for enterprise scale.
                 </p>
               </div>
-              <div className="flex justify-between items-end">
-                <span className="material-symbols-outlined text-primary text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  analytics
-                </span>
-                <span className="material-symbols-outlined hover-reveal-arrow text-primary">
-                  arrow_forward
-                </span>
+              <div>
+                <span className="material-symbols-outlined text-secondary text-2xl">analytics</span>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Detail Section (Bento Style) */}
-        <section className="px-container-padding py-section-margin border-t border-border-hairline">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
-            <div className="lg:col-span-4 flex flex-col justify-between">
-              <div className="mb-gutter">
-                <span className="font-section-number text-section-number text-primary block mb-2">§ 02</span>
-                <h2 className="font-display-lg text-display-lg text-on-surface font-bold">
-                  Designed for <span className="font-display-lg-italic italic font-normal">Clarity</span>.
+        {/* Section 02 - Designed for Clarity */}
+        <section className="px-6 md:px-16 py-20 border-t border-border-hairline bg-[#fbfbfa]">
+          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+            {/* Left Content */}
+            <div className="lg:col-span-5 flex flex-col justify-between h-full py-2">
+              <div>
+                <div className="flex items-center gap-4 mb-4">
+                  <span className="font-section-number text-primary font-semibold text-sm">§ 02</span>
+                  <div className="h-px w-12 bg-primary"></div>
+                </div>
+                <h2 className="font-display-lg text-3xl md:text-5xl text-on-surface font-bold tracking-tight mb-6">
+                  Designed for <span className="font-display-lg-italic italic text-secondary font-normal font-serif font-light">Clarity</span>.
                 </h2>
-                <p className="font-body-md text-on-surface-variant mt-4 text-sm leading-relaxed">
+                <p className="font-body-md text-secondary text-[14px] leading-relaxed mb-12">
                   We've eliminated the clutter of traditional FinTech to focus on the data points that drive decision making.
                 </p>
               </div>
-              <div className="space-y-4">
-                <div className="border-l-2 border-primary pl-4 py-2">
-                  <span className="font-label-mono text-label-mono text-primary uppercase text-xs">
-                    Current Protocol
+              <div className="space-y-6">
+                <div>
+                  <span className="font-label-mono text-[10px] text-secondary uppercase tracking-widest block mb-1">
+                    CURRENT PROTOCOL
                   </span>
-                  <p className="font-body-md font-bold text-sm">V4.2.1 Stable</p>
+                  <span className="font-body-md font-bold text-on-surface text-[13px]">
+                    V4.2.1 Stable
+                  </span>
                 </div>
-                <div className="border-l-2 border-border-hairline pl-4 py-2">
-                  <span className="font-label-mono text-label-mono text-secondary uppercase text-xs">
-                    Last Audit
+                <div>
+                  <span className="font-label-mono text-[10px] text-secondary uppercase tracking-widest block mb-1">
+                    LAST AUDIT
                   </span>
-                  <p className="font-body-md font-bold text-sm">Oct 24, 2024</p>
+                  <span className="font-body-md font-bold text-on-surface text-[13px]">
+                    Oct 24, 2024
+                  </span>
                 </div>
               </div>
             </div>
-            <div className="lg:col-span-8">
-              <div className="relative bg-surface border border-border-hairline overflow-hidden h-[450px]">
+
+            {/* Right Desktop Image Mockup */}
+            <div className="lg:col-span-7">
+              <div className="border border-border-hairline overflow-hidden bg-white shadow-sm flex items-center justify-center">
                 <img
-                  className="w-full h-full object-cover"
-                  alt="A clean, minimalist enterprise software interface showing complex financial charts and data points in a sophisticated sage green and paper-white color palette."
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBVL5XfMzBGpDEN5eiJy5XLTmG5MalNiiUuYL9u3TDaBZLaBVzBfwXmdoxRJTYvPEvGwQE8qWfz01sRMey8msNIYW8a8oIEhltsz5fPqiX9oZaOUIXiRP77MjKpOITGKzxX0OTDiVQdKdRCMp267G9iRgP6VJXdGbnohA8HzwTNsg_dPJtHdwKwxEKaQYwvzGv4QscZnhyNkx9K-6XmqoLV3r_70qiA32pfPCbCag_794GSHxj_O"
+                  className="w-full h-auto object-cover block"
+                  alt="A computer setup showing the Aura Finance application dashboard inside a modern desk space."
+                  src="/image.png"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-background/40 to-transparent"></div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Stats Strip */}
-        <section ref={statsSectionRef} className="px-container-padding py-section-margin bg-on-surface text-surface">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-gutter text-center">
-            <div className="flex flex-col items-center">
-              <span className="font-stat-kpi text-stat-kpi mb-2 tabular-nums font-bold" data-target="$4.2B">
-                $0.0B
-              </span>
-              <span className="font-label-mono text-label-mono uppercase tracking-widest text-surface/60 text-xs">
-                Assets Managed
-              </span>
+        {/* Dark Stats Strip */}
+        <section className="bg-[#121212] text-white py-16 px-6 md:px-16">
+          <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            <div>
+              <div className="font-display-lg text-3xl md:text-5xl font-bold tracking-tight mb-2">
+                $4.2B
+              </div>
+              <div className="font-label-mono text-[10px] uppercase tracking-widest text-[#a3a3a3]">
+                ASSETS MANAGED
+              </div>
             </div>
-            <div className="flex flex-col items-center">
-              <span className="font-stat-kpi text-stat-kpi mb-2 tabular-nums font-bold" data-target="99.9%">
-                0.0%
-              </span>
-              <span className="font-label-mono text-label-mono uppercase tracking-widest text-surface/60 text-xs">
-                System Uptime
-              </span>
+            <div>
+              <div className="font-display-lg text-3xl md:text-5xl font-bold tracking-tight mb-2">
+                99.9%
+              </div>
+              <div className="font-label-mono text-[10px] uppercase tracking-widest text-[#a3a3a3]">
+                SYSTEM UPTIME
+              </div>
             </div>
-            <div className="flex flex-col items-center">
-              <span className="font-stat-kpi text-stat-kpi mb-2 tabular-nums font-bold" data-target="0.02s">
-                0.00s
-              </span>
-              <span className="font-label-mono text-label-mono uppercase tracking-widest text-surface/60 text-xs">
-                Sync Latency
-              </span>
+            <div>
+              <div className="font-display-lg text-3xl md:text-5xl font-bold tracking-tight mb-2">
+                0.02s
+              </div>
+              <div className="font-label-mono text-[10px] uppercase tracking-widest text-[#a3a3a3]">
+                SYNC LATENCY
+              </div>
             </div>
-            <div className="flex flex-col items-center">
-              <span className="font-stat-kpi text-stat-kpi mb-2 tabular-nums font-bold" data-target="120+">
-                0+
-              </span>
-              <span className="font-label-mono text-label-mono uppercase tracking-widest text-surface/60 text-xs">
-                Integrations
-              </span>
+            <div>
+              <div className="font-display-lg text-3xl md:text-5xl font-bold tracking-tight mb-2">
+                120+
+              </div>
+              <div className="font-label-mono text-[10px] uppercase tracking-widest text-[#a3a3a3]">
+                INTEGRATIONS
+              </div>
             </div>
           </div>
         </section>
 
         {/* CTA Section */}
-        <section className="px-container-padding py-section-margin text-center">
-          <h2 className="font-display-lg text-[64px] mb-8 max-w-3xl mx-auto font-bold tracking-tight">
-            Modernize your <span className="font-display-lg-italic italic font-normal">financial</span> stack today.
+        <section className="px-6 py-24 text-center max-w-4xl mx-auto">
+          <h2 className="font-display-lg text-3xl md:text-[56px] leading-[1.1] mb-10 text-on-surface font-bold tracking-tight">
+            Modernize your <span className="font-display-lg-italic italic text-secondary font-normal font-serif font-light">financial</span> stack today.
           </h2>
-          <div className="flex flex-col md:flex-row justify-center items-center space-y-4 md:space-y-0 md:space-x-gutter">
+          <div className="flex flex-col sm:flex-row justify-center items-center gap-6">
             <Link href="/register">
-              <button className="bg-primary text-on-primary px-12 py-5 rounded-none font-label-mono text-label-mono uppercase tracking-[0.2em] hover:bg-opacity-90 transition-all cursor-pointer">
+              <button className="bg-primary text-white px-10 py-5 rounded-none font-label-mono text-xs uppercase tracking-widest hover:bg-opacity-90 transition-all cursor-pointer font-semibold">
                 Start Free Pilot
               </button>
             </Link>
             <Link
-              className="font-label-mono text-label-mono uppercase tracking-widest border-b border-on-surface pb-1 hover:text-primary hover:border-primary transition-all"
+              className="font-label-mono text-xs uppercase tracking-widest border-b border-on-surface pb-1 hover:text-primary hover:border-primary transition-all font-semibold"
               href="#"
             >
               Talk to a Strategist
@@ -364,54 +282,60 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="w-full py-section-margin bg-background border-t border-border-hairline px-container-padding grid grid-cols-1 md:grid-cols-2 gap-gutter">
-        <div className="flex flex-col justify-between">
-          <div>
-            <div className="font-display-lg text-display-lg text-on-surface mb-4 font-bold">
-              AssetFlow
+      <footer className="w-full py-16 bg-[#fbfbfa] border-t border-border-hairline px-6 md:px-16">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12">
+          {/* Brand Column */}
+          <div className="flex flex-col justify-between gap-6">
+            <div>
+              <div className="font-display-lg text-[22px] text-on-surface mb-3 font-bold tracking-tight">
+                AssetFlow
+              </div>
+              <p className="font-body-md text-secondary text-xs max-w-xs leading-relaxed">
+                The precision ledger for institutional grade asset orchestration and workflow management.
+              </p>
             </div>
-            <p className="font-body-md text-secondary max-w-sm text-sm">
-              The precision ledger for institutional grade asset orchestration and workflow management.
-            </p>
+            <div className="font-label-mono text-[10px] text-secondary uppercase">
+              © 2024 AssetFlow Systems. All rights reserved.
+            </div>
           </div>
-          <div className="mt-8 font-label-mono text-label-mono text-secondary text-xs">
-            © 2024 AssetFlow Systems. All rights reserved.
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-gutter">
-          <div className="flex flex-col space-y-4 text-sm">
-            <span className="font-label-mono text-label-mono text-on-surface uppercase mb-2 font-bold text-xs tracking-wider">
-              Company
-            </span>
-            <Link className="font-label-mono text-label-mono text-secondary hover:text-primary underline transition-opacity duration-300" href="#">
-              Privacy
-            </Link>
-            <Link className="font-label-mono text-label-mono text-secondary hover:text-primary underline transition-opacity duration-300" href="#">
-              Terms
-            </Link>
-            <Link className="font-label-mono text-label-mono text-secondary hover:text-primary underline transition-opacity duration-300" href="#">
-              Security
-            </Link>
-            <Link className="font-label-mono text-label-mono text-secondary hover:text-primary underline transition-opacity duration-300" href="#">
-              System Status
-            </Link>
-          </div>
-          <div className="flex flex-col space-y-4 text-sm">
-            <span className="font-label-mono text-label-mono text-on-surface uppercase mb-2 font-bold text-xs tracking-wider">
-              Platform
-            </span>
-            <Link className="font-label-mono text-label-mono text-secondary hover:text-primary underline transition-opacity duration-300" href="#">
-              Solutions
-            </Link>
-            <Link className="font-label-mono text-label-mono text-secondary hover:text-primary underline transition-opacity duration-300" href="#">
-              Framework
-            </Link>
-            <Link className="font-label-mono text-label-mono text-secondary hover:text-primary underline transition-opacity duration-300" href="#">
-              Journal
-            </Link>
-            <Link className="font-label-mono text-label-mono text-secondary hover:text-primary underline transition-opacity duration-300" href="#">
-              Pricing
-            </Link>
+
+          {/* Links Columns */}
+          <div className="grid grid-cols-2 gap-8 md:justify-items-end">
+            <div className="flex flex-col space-y-3 text-xs md:items-end">
+              <span className="font-label-mono text-[10px] text-on-surface uppercase mb-2 font-bold tracking-wider">
+                Company
+              </span>
+              <Link className="font-label-mono text-secondary hover:text-primary transition-colors" href="#">
+                Privacy
+              </Link>
+              <Link className="font-label-mono text-secondary hover:text-primary transition-colors" href="#">
+                Terms
+              </Link>
+              <Link className="font-label-mono text-secondary hover:text-primary transition-colors" href="#">
+                Security
+              </Link>
+              <Link className="font-label-mono text-secondary hover:text-primary transition-colors" href="#">
+                System Status
+              </Link>
+            </div>
+
+            <div className="flex flex-col space-y-3 text-xs md:items-end">
+              <span className="font-label-mono text-[10px] text-on-surface uppercase mb-2 font-bold tracking-wider">
+                Platform
+              </span>
+              <Link className="font-label-mono text-secondary hover:text-primary transition-colors" href="#">
+                Solutions
+              </Link>
+              <Link className="font-label-mono text-secondary hover:text-primary transition-colors" href="#">
+                Framework
+              </Link>
+              <Link className="font-label-mono text-secondary hover:text-primary transition-colors" href="#">
+                Journal
+              </Link>
+              <Link className="font-label-mono text-secondary hover:text-primary transition-colors" href="#">
+                Pricing
+              </Link>
+            </div>
           </div>
         </div>
       </footer>
