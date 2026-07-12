@@ -41,10 +41,11 @@ export default function Bookings() {
   // Lists
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
+  const [pendingBookings, setPendingBookings] = useState<Booking[]>([]);
   const [bookableAssets, setBookableAssets] = useState<Asset[]>([]);
 
   // State
-  const [activeTab, setActiveTab] = useState<"calendar" | "my-list">("calendar");
+  const [activeTab, setActiveTab] = useState<"calendar" | "my-list" | "approvals">("calendar");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -80,6 +81,17 @@ export default function Bookings() {
         const data = await myRes.json();
         if (data.success) {
           setMyBookings(data.bookings);
+        }
+      }
+
+      // Fetch pending bookings for approval queue if not EMPLOYEE
+      if (role && role !== "EMPLOYEE") {
+        const pendingRes = await fetch("/api/bookings?status=PENDING&limit=100");
+        if (pendingRes.status === 200) {
+          const data = await pendingRes.json();
+          if (data.success) {
+            setPendingBookings(data.bookings);
+          }
         }
       }
 
@@ -174,6 +186,49 @@ export default function Bookings() {
         alert(data.error || "Cancellation failed");
       }
     } catch (e) {
+      alert("A network error occurred.");
+    }
+  };
+
+  // Approve booking
+  const handleApproveBooking = async (bookingId: string) => {
+    if (!confirm("Are you sure you want to approve this booking request?")) return;
+    try {
+      setSubmitting(true);
+      const res = await fetch(`/api/bookings/${bookingId}/approve`, { method: "POST" });
+      const data = await res.json();
+      setSubmitting(false);
+      if (res.status === 200 && data.success) {
+        fetchData();
+      } else {
+        alert(data.error || "Approval failed");
+      }
+    } catch (e) {
+      setSubmitting(false);
+      alert("A network error occurred.");
+    }
+  };
+
+  // Reject booking
+  const handleRejectBooking = async (bookingId: string) => {
+    const reason = prompt("Please enter the reason for rejection (optional):");
+    if (reason === null) return; // user cancelled prompt
+    try {
+      setSubmitting(true);
+      const res = await fetch(`/api/bookings/${bookingId}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason || null }),
+      });
+      const data = await res.json();
+      setSubmitting(false);
+      if (res.status === 200 && data.success) {
+        fetchData();
+      } else {
+        alert(data.error || "Rejection failed");
+      }
+    } catch (e) {
+      setSubmitting(false);
       alert("A network error occurred.");
     }
   };
@@ -285,6 +340,16 @@ export default function Bookings() {
             >
               My Bookings ({myBookings.length})
             </button>
+            {role !== "EMPLOYEE" && (
+              <button
+                onClick={() => setActiveTab("approvals")}
+                className={`px-6 py-4 border-b-2 transition-all cursor-pointer ${
+                  activeTab === "approvals" ? "border-primary text-on-surface font-bold" : "border-transparent opacity-60 hover:opacity-100"
+                }`}
+              >
+                Pending Approvals ({pendingBookings.length})
+              </button>
+            )}
           </div>
 
           {/* Tab 1: Month Calendar Grid */}
@@ -433,6 +498,64 @@ export default function Bookings() {
                               Cancel Booking
                             </button>
                           )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Tab 3: Pending Approvals Queue */}
+          {activeTab === "approvals" && role !== "EMPLOYEE" && (
+            <div className="bg-white border border-border-hairline overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse min-w-max text-xs font-body-md">
+                <thead>
+                  <tr className="border-b border-border-hairline bg-surface-container-low text-secondary font-label-mono uppercase font-bold">
+                    <th className="px-gutter py-4">Title</th>
+                    <th className="px-gutter py-4">Resource Asset</th>
+                    <th className="px-gutter py-4">Booked By</th>
+                    <th className="px-gutter py-4">Purpose</th>
+                    <th className="px-gutter py-4">Start Time</th>
+                    <th className="px-gutter py-4">End Time</th>
+                    <th className="px-gutter py-4">Notes</th>
+                    <th className="px-gutter py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-hairline">
+                  {pendingBookings.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-gutter py-12 text-center text-secondary">
+                        No pending booking requests found.
+                      </td>
+                    </tr>
+                  ) : (
+                    pendingBookings.map((b) => (
+                      <tr key={b.id} className="hover:bg-surface-container-lowest transition-colors">
+                        <td className="px-gutter py-4 font-bold">{b.title}</td>
+                        <td className="px-gutter py-4 font-label-mono">{b.asset.name} ({b.asset.assetTag})</td>
+                        <td className="px-gutter py-4">
+                          <span className="font-bold block">{b.bookedBy.firstName} {b.bookedBy.lastName}</span>
+                          <span className="text-[10px] font-label-mono text-secondary">Code: {b.bookedBy.employeeCode}</span>
+                        </td>
+                        <td className="px-gutter py-4 font-label-mono uppercase">{b.purpose}</td>
+                        <td className="px-gutter py-4">{new Date(b.startAt).toLocaleString()}</td>
+                        <td className="px-gutter py-4">{new Date(b.endAt).toLocaleString()}</td>
+                        <td className="px-gutter py-4 text-secondary max-w-xs truncate" title={b.notes || ""}>{b.notes || "—"}</td>
+                        <td className="px-gutter py-4 text-right space-x-2">
+                          <button
+                            onClick={() => handleApproveBooking(b.id)}
+                            className="bg-primary text-white px-3 py-1.5 font-label-mono text-[9px] uppercase tracking-wider hover:bg-opacity-90 cursor-pointer font-bold"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleRejectBooking(b.id)}
+                            className="border border-error text-error px-3 py-1.5 font-label-mono text-[9px] uppercase tracking-wider hover:bg-error/5 cursor-pointer font-bold"
+                          >
+                            Reject
+                          </button>
                         </td>
                       </tr>
                     ))

@@ -79,6 +79,8 @@ export default function Dashboard() {
   const [kpis, setKpis] = useState<KPIProps | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [custody, setCustody] = useState<Allocation[]>([]);
+  const [overdueReturns, setOverdueReturns] = useState<any[]>([]);
+  const [upcomingReturns, setUpcomingReturns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchDashboardData = async () => {
@@ -109,6 +111,25 @@ export default function Dashboard() {
           const allocData = await allocRes.json();
           if (allocData.success) {
             setCustody(allocData.allocations);
+          }
+        }
+      }
+
+      // Fetch Overdue and Upcoming returns if Admin / Asset Manager
+      if (role === "ADMIN" || role === "ASSET_MANAGER") {
+        const overdueRes = await fetch("/api/dashboard/overdue-returns?limit=10");
+        if (overdueRes.status === 200) {
+          const overdueData = await overdueRes.json();
+          if (overdueData.success) {
+            setOverdueReturns(overdueData.overdueAllocations || []);
+          }
+        }
+
+        const upcomingRes = await fetch("/api/dashboard/upcoming-returns?limit=10&days=7");
+        if (upcomingRes.status === 200) {
+          const upcomingData = await upcomingRes.json();
+          if (upcomingData.success) {
+            setUpcomingReturns(upcomingData.upcomingAllocations || []);
           }
         }
       }
@@ -309,6 +330,65 @@ export default function Dashboard() {
                       })}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Overdue & Upcoming Returns Widget (Admin/Asset Manager only) */}
+              {(role === "ADMIN" || role === "ASSET_MANAGER") && (
+                <div className="p-gutter border border-border-hairline bg-surface space-y-6">
+                  <div>
+                    <div className="font-label-mono text-[10px] text-error uppercase tracking-widest mb-4 font-semibold flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-sm">warning</span>
+                      Overdue Returns ({overdueReturns.length})
+                    </div>
+                    {overdueReturns.length === 0 ? (
+                      <p className="text-secondary text-xs italic">No overdue returns flagged.</p>
+                    ) : (
+                      <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar pr-2">
+                        {overdueReturns.map((alloc) => (
+                          <div key={alloc.id} className="text-xs p-3 border border-error/20 bg-error-container/5">
+                            <div className="flex justify-between items-start mb-2">
+                              <span className="font-bold text-on-surface leading-tight">{alloc.asset.name}</span>
+                              <span className="font-label-mono text-[9px] uppercase text-error bg-error-container/20 px-1.5 py-0.5">{alloc.asset.assetTag}</span>
+                            </div>
+                            <div className="space-y-1 text-[10px] text-secondary">
+                              <p>Holder: <span className="font-bold text-on-surface">{alloc.allocatedToEmployee ? `${alloc.allocatedToEmployee.firstName} ${alloc.allocatedToEmployee.lastName}` : (alloc.allocatedToDepartment ? alloc.allocatedToDepartment.name : '—')}</span></p>
+                              <div className="flex justify-between items-center font-label-mono pt-1">
+                                <span>Due: <span className="text-error font-bold">{new Date(alloc.expectedReturnDate).toLocaleDateString()}</span></span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-border-hairline pt-6">
+                    <div className="font-label-mono text-[10px] text-secondary uppercase tracking-widest mb-4 font-semibold flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-sm">pending_actions</span>
+                      Upcoming Returns (7 Days)
+                    </div>
+                    {upcomingReturns.length === 0 ? (
+                      <p className="text-secondary text-xs italic">No returns expected this week.</p>
+                    ) : (
+                      <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar pr-2">
+                        {upcomingReturns.map((alloc) => (
+                          <div key={alloc.id} className="text-xs p-3 border border-border-hairline bg-surface-container-lowest">
+                            <div className="flex justify-between items-start mb-2">
+                              <span className="font-bold text-on-surface leading-tight">{alloc.asset.name}</span>
+                              <span className="font-label-mono text-[9px] uppercase text-secondary bg-surface-container-high px-1.5 py-0.5">{alloc.asset.assetTag}</span>
+                            </div>
+                            <div className="space-y-1 text-[10px] text-secondary">
+                              <p>Holder: <span className="font-bold text-on-surface">{alloc.allocatedToEmployee ? `${alloc.allocatedToEmployee.firstName} ${alloc.allocatedToEmployee.lastName}` : (alloc.allocatedToDepartment ? alloc.allocatedToDepartment.name : '—')}</span></p>
+                              <div className="flex justify-between items-center font-label-mono pt-1">
+                                <span>Due: {new Date(alloc.expectedReturnDate).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
