@@ -115,10 +115,7 @@ async function runTests() {
         Cookie: johnCookie,
       },
       body: JSON.stringify({
-        params: {
-          timestamp: 1315060095,
-          folder: 'assets',
-        },
+        folder: 'assets',
       }),
     });
 
@@ -155,7 +152,7 @@ async function runTests() {
 
     const getSettingsRes = await fetch(`${BASE_URL}/api/settings`, {
       method: 'GET',
-      headers: { Cookie: johnCookie },
+      headers: { Cookie: adminCookie },
     });
     const getSettingsData = await getSettingsRes.json();
     console.log(`GET settings status: ${getSettingsRes.status}`);
@@ -204,8 +201,11 @@ async function runTests() {
     allocationId = overdueAlloc.id;
 
     // Trigger Cron
-    const overdueCronRes = await fetch(`${BASE_URL}/api/cron/flag-overdue?secret=fallback-cron-secret`, {
+    const overdueCronRes = await fetch(`${BASE_URL}/api/cron/flag-overdue`, {
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.CRON_SECRET || 'fallback-cron-secret'}`,
+      },
     });
     const overdueCronData = await overdueCronRes.json();
     console.log(`Cron flag-overdue status: ${overdueCronRes.status}`);
@@ -250,8 +250,11 @@ async function runTests() {
     bookingId = booking.id;
 
     // Trigger Cron
-    const reminderRes = await fetch(`${BASE_URL}/api/cron/booking-reminders?secret=fallback-cron-secret`, {
+    const reminderRes = await fetch(`${BASE_URL}/api/cron/booking-reminders`, {
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.CRON_SECRET || 'fallback-cron-secret'}`,
+      },
     });
     const reminderData = await reminderRes.json();
     console.log(`Cron booking-reminders status: ${reminderRes.status}`);
@@ -282,8 +285,11 @@ async function runTests() {
     });
 
     // Trigger transitions cron
-    const transRes = await fetch(`${BASE_URL}/api/cron/booking-transitions?secret=fallback-cron-secret`, {
+    const transRes = await fetch(`${BASE_URL}/api/cron/booking-transitions`, {
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.CRON_SECRET || 'fallback-cron-secret'}`,
+      },
     });
     const transData = await transRes.json();
     console.log(`Cron booking-transitions status: ${transRes.status}`);
@@ -302,8 +308,11 @@ async function runTests() {
     });
 
     // Trigger again
-    const transRes2 = await fetch(`${BASE_URL}/api/cron/booking-transitions?secret=fallback-cron-secret`, {
+    const transRes2 = await fetch(`${BASE_URL}/api/cron/booking-transitions`, {
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.CRON_SECRET || 'fallback-cron-secret'}`,
+      },
     });
     const checkBookingCompleted = await prisma.resourceBooking.findUnique({ where: { id: bookingId } });
     console.log(`Booking status: ${checkBookingCompleted?.status} (should be COMPLETED)`);
@@ -330,8 +339,11 @@ async function runTests() {
     outboxId = outbox.id;
 
     // Trigger Cron
-    const outboxRes = await fetch(`${BASE_URL}/api/cron/process-outbox?secret=fallback-cron-secret`, {
+    const outboxRes = await fetch(`${BASE_URL}/api/cron/process-outbox`, {
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.CRON_SECRET || 'fallback-cron-secret'}`,
+      },
     });
     const outboxData = await outboxRes.json();
     console.log(`Cron process-outbox status: ${outboxRes.status}`);
