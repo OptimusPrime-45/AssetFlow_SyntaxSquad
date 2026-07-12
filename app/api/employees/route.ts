@@ -6,6 +6,7 @@ import { withEmployeeCode } from '@/lib/employee-code';
 import { EmployeeStatus } from '@/app/generated/prisma/enums';
 import { z } from 'zod';
 import crypto from 'crypto';
+import { sendEmail } from '@/lib/email/resend';
 
 // No `role` and no `employeeCode` here, by design:
 //
@@ -227,6 +228,24 @@ export async function POST(request: Request) {
         });
       })
     );
+
+    if (generatedPassword && data.email) {
+      await sendEmail({
+        to: data.email,
+        subject: 'Welcome to AssetFlow - Your Account Details',
+        html: `
+          <h2>Welcome to AssetFlow</h2>
+          <p>Hi ${data.firstName},</p>
+          <p>An employee profile and login account have been created for you.</p>
+          <p>Here are your credentials for logging in:</p>
+          <p><strong>Portal URL:</strong> http://localhost:3000</p>
+          <p><strong>Email:</strong> ${data.email}</p>
+          <p><strong>Employee Code:</strong> ${employee.employeeCode}</p>
+          <p><strong>Temporary Password:</strong> <code>${generatedPassword}</code></p>
+          <p>Please change your password immediately after logging in.</p>
+        `
+      });
+    }
 
     return NextResponse.json(
       { success: true, employee, ...(generatedPassword ? { generatedPassword } : {}) },
