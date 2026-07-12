@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 
 export type UserRole = "EMPLOYEE" | "DEPARTMENT_HEAD" | "ASSET_MANAGER" | "ADMIN";
@@ -44,42 +44,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  // Pages fetch their data from `useEffect(..., [user, role])`. Handing them a
+  // fresh object for an unchanged profile would restart every one of those
+  // fetches on each revalidation, so only swap in `next` when it really differs.
+  const applyUser = (next: UserProfile | null) => {
+    setUser((prev) =>
+      prev && next && JSON.stringify(prev) === JSON.stringify(next) ? prev : next
+    );
+  };
+
   const fetchProfile = async () => {
     try {
       const res = await fetch("/api/auth/me");
       if (res.status === 200) {
         const data = await res.json();
         if (data.success && data.user) {
-          setUser(data.user);
+          applyUser(data.user);
           setError(null);
         } else {
-          setUser(null);
+          applyUser(null);
         }
       } else {
-        setUser(null);
+        applyUser(null);
       }
     } catch (e) {
       console.error("Failed to retrieve authentication profile", e);
-      setUser(null);
+      applyUser(null);
     } finally {
       setLoading(false);
     }
   };
 
+  const hydrated = useRef(false);
+
+  // The profile is fetched once to hydrate, then revalidated in the background on
+  // each navigation — a revoked or deactivated account still gets kicked on the
+  // next route change. What we no longer do is flip `loading` back on: that made
+  // every page blank out to its "Initializing Workspace" state and wait a full
+  // `/api/auth/me` round trip before it was even allowed to start loading data.
   useEffect(() => {
-    const publicPaths = ["/", "/login", "/register"];
-    if (publicPaths.includes(router.pathname)) {
-      setLoading(false);
+    if (hydrated.current) {
       fetchProfile();
       return;
     }
+    hydrated.current = true;
 
-    const checkAuthAndFetch = async () => {
-      setLoading(true);
-      await fetchProfile();
-    };
-
-    checkAuthAndFetch();
+    const publicPaths = ["/", "/login", "/register"];
+    if (publicPaths.includes(router.pathname)) {
+      setLoading(false);
+    }
+    fetchProfile();
   }, [router.pathname]);
 
   // Route guarding check
