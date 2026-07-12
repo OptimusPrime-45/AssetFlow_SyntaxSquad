@@ -1,11 +1,11 @@
 "use client";
-
+ 
 import React from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/AuthContext";
 
 interface SidebarProps {
-  activePage: "dashboard" | "assets" | "workflows" | "treasury" | "reports" | "settings" | "bookings" | "audits";
+  activePage: "dashboard" | "assets" | "workflows" | "treasury" | "reports" | "settings" | "bookings" | "audits" | "categories" | "allocations" | "transfers" | "maintenance" | "notifications" | "profile";
 }
 
 export default function Sidebar({ activePage }: SidebarProps) {
@@ -31,14 +31,14 @@ export default function Sidebar({ activePage }: SidebarProps) {
       label: "§ 03 · Bookings",
       icon: "calendar_today",
       href: "/bookings",
-      roles: ["ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
+      roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
     },
     {
       id: "workflows",
       label: "§ 04 · Workflows",
       icon: "account_tree",
       href: "/workflows",
-      roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
+      roles: ["ADMIN", "DEPARTMENT_HEAD", "EMPLOYEE"],
     },
     {
       id: "audits",
@@ -63,8 +63,72 @@ export default function Sidebar({ activePage }: SidebarProps) {
     },
   ];
 
+  // Specific links for ASSET_MANAGER as requested by prompt
+  const assetManagerLinks = [
+    {
+      id: "dashboard",
+      label: "§ 01 · Dashboard",
+      icon: "dashboard",
+      href: "/dashboard",
+    },
+    {
+      id: "assets",
+      label: "§ 02 · Assets",
+      icon: "account_balance_wallet",
+      href: "/assets",
+    },
+    {
+      id: "categories",
+      label: "§ 03 · Categories",
+      icon: "category",
+      href: "/categories",
+    },
+    {
+      id: "allocations",
+      label: "§ 04 · Allocations",
+      icon: "assignment_ind",
+      href: "/allocations",
+    },
+    {
+      id: "transfers",
+      label: "§ 05 · Transfers",
+      icon: "sync_alt",
+      href: "/transfers",
+    },
+    {
+      id: "bookings",
+      label: "§ 06 · Bookings",
+      icon: "calendar_today",
+      href: "/bookings",
+    },
+    {
+      id: "maintenance",
+      label: "§ 07 · Maintenance",
+      icon: "build",
+      href: "/maintenance",
+    },
+    {
+      id: "reports",
+      label: "§ 08 · Reports",
+      icon: "analytics",
+      href: "/reports",
+    },
+    {
+      id: "notifications",
+      label: "§ 09 · Notifications",
+      icon: "notifications",
+      href: "/notifications",
+    },
+    {
+      id: "profile",
+      label: "§ 10 · Profile",
+      icon: "person",
+      href: "/profile",
+    },
+  ];
+
   // Filter links by current user's role
-  const links = allLinks.filter((link) => {
+  const links = role === "ASSET_MANAGER" ? assetManagerLinks : allLinks.filter((link) => {
     if (!role) return false;
     return link.roles.includes(role);
   });
@@ -82,7 +146,7 @@ export default function Sidebar({ activePage }: SidebarProps) {
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-3 space-y-1">
+      <nav className="flex-1 px-3 space-y-1 overflow-y-auto custom-scrollbar">
         {links.map((link) => {
           const isActive = activePage === link.id;
           return (
