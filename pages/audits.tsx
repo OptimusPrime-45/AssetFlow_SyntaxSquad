@@ -123,8 +123,15 @@ export default function Audits() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Fetch Cycles
-      const cycleRes = await fetch("/api/audit-cycles");
+
+      // Independent of each other — awaiting them in turn cost a round trip per list.
+      const [cycleRes, assignRes, deptRes, assetRes] = await Promise.all([
+        fetch("/api/audit-cycles"),
+        fetch("/api/audits/my-assignments"),
+        fetch("/api/departments"),
+        fetch("/api/assets?limit=100"),
+      ]);
+
       if (cycleRes.status === 200) {
         const data = await cycleRes.json();
         if (data.success) {
@@ -132,8 +139,6 @@ export default function Audits() {
         }
       }
 
-      // Fetch Assignments
-      const assignRes = await fetch("/api/audits/my-assignments");
       if (assignRes.status === 200) {
         const data = await assignRes.json();
         if (data.success) {
@@ -141,8 +146,6 @@ export default function Audits() {
         }
       }
 
-      // Fetch Departments
-      const deptRes = await fetch("/api/departments");
       if (deptRes.status === 200) {
         const data = await deptRes.json();
         if (data.success) {
@@ -150,8 +153,6 @@ export default function Audits() {
         }
       }
 
-      // Fetch Assets
-      const assetRes = await fetch("/api/assets?limit=100");
       if (assetRes.status === 200) {
         const data = await assetRes.json();
         if (data.success) {

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/context/AuthContext";
 
 interface SidebarProps {
-  activePage: "dashboard" | "assets" | "workflows" | "treasury" | "reports" | "settings" | "bookings" | "audits";
+  activePage: string;
 }
 
 export default function Sidebar({ activePage }: SidebarProps) {
@@ -19,6 +19,7 @@ export default function Sidebar({ activePage }: SidebarProps) {
       href: "/dashboard",
       roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
     },
+    // Manager Assets
     {
       id: "assets",
       label: "§ 02 · Assets",
@@ -26,26 +27,70 @@ export default function Sidebar({ activePage }: SidebarProps) {
       href: "/assets",
       roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD"],
     },
+    // Employee My Assets
+    {
+      id: "assets",
+      label: "§ 02 · My Assets",
+      icon: "account_balance_wallet",
+      href: "/assets",
+      roles: ["EMPLOYEE"],
+    },
+    // Manager Bookings
     {
       id: "bookings",
       label: "§ 03 · Bookings",
       icon: "calendar_today",
       href: "/bookings",
-      roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
+      // Not EMPLOYEE — they get the "My Bookings" entry below, and listing them
+      // here too rendered the link twice under a duplicate key.
+      roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD"],
     },
+    // Employee My Bookings
+    {
+      id: "bookings",
+      label: "§ 03 · My Bookings",
+      icon: "calendar_today",
+      href: "/bookings",
+      roles: ["EMPLOYEE"],
+    },
+    // Manager Workflows
     {
       id: "workflows",
       label: "§ 04 · Workflows",
       icon: "account_tree",
       href: "/workflows",
-      roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
+      roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD"],
+    },
+    // Employee Maintenance
+    {
+      id: "workflows",
+      label: "§ 04 · Maintenance",
+      icon: "build",
+      href: "/workflows",
+      roles: ["EMPLOYEE"],
+    },
+    {
+      id: "notifications",
+      label: "§ 05 · Notifications",
+      icon: "notifications",
+      href: "/notifications",
+      roles: ["EMPLOYEE"],
+    },
+    {
+      id: "profile",
+      label: "§ 06 · Profile",
+      icon: "account_circle",
+      href: "/profile",
+      roles: ["EMPLOYEE"],
     },
     {
       id: "audits",
       label: "§ 05 · Audits",
       icon: "verified_user",
       href: "/audits",
-      roles: ["ADMIN", "EMPLOYEE"], // Employee serves as auditor role scope
+      // Asset Managers create and run audit cycles (POST /api/audit-cycles
+      // authorizes them), so they need the link.
+      roles: ["ADMIN", "ASSET_MANAGER"],
     },
     {
       id: "reports",
@@ -64,10 +109,25 @@ export default function Sidebar({ activePage }: SidebarProps) {
   ];
 
   // Filter links by current user's role
-  const links = allLinks.filter((link) => {
+  let links = allLinks.filter((link) => {
     if (!role) return false;
     return link.roles.includes(role);
   });
+
+  // Customize sidebar strictly for DEPARTMENT_HEAD to use tab routing on dashboard
+  if (role === "DEPARTMENT_HEAD") {
+    links = [
+      { id: "dashboard", label: "§ 01 · Dashboard", icon: "dashboard", href: "/dashboard", roles: ["DEPARTMENT_HEAD"] },
+      { id: "assets", label: "§ 02 · Dept Assets", icon: "account_balance_wallet", href: "/dashboard?tab=assets", roles: ["DEPARTMENT_HEAD"] },
+      { id: "employees", label: "§ 03 · Employees", icon: "badge", href: "/dashboard?tab=employees", roles: ["DEPARTMENT_HEAD"] },
+      { id: "transfers", label: "§ 04 · Transfers", icon: "sync_alt", href: "/dashboard?tab=transfers", roles: ["DEPARTMENT_HEAD"] },
+      { id: "bookings", label: "§ 05 · Bookings", icon: "calendar_today", href: "/dashboard?tab=bookings", roles: ["DEPARTMENT_HEAD"] },
+      { id: "maintenance", label: "§ 06 · Maintenance", icon: "build", href: "/dashboard?tab=maintenance", roles: ["DEPARTMENT_HEAD"] },
+      { id: "reports", label: "§ 07 · Reports", icon: "analytics", href: "/dashboard?tab=reports", roles: ["DEPARTMENT_HEAD"] },
+      { id: "notifications", label: "§ 08 · Notifications", icon: "notifications", href: "/dashboard?tab=notifications", roles: ["DEPARTMENT_HEAD"] },
+      { id: "profile", label: "§ 09 · Profile", icon: "person", href: "/dashboard?tab=profile", roles: ["DEPARTMENT_HEAD"] },
+    ];
+  }
 
   return (
     <aside className="h-screen w-64 fixed left-0 top-0 bg-surface-container-low border-r border-border-hairline flex flex-col py-gutter space-y-unit z-50">

@@ -19,7 +19,7 @@ interface Booking {
   title: string;
   purpose: "ROOM" | "VEHICLE" | "EQUIPMENT" | "SPACE" | "OTHER";
   audience: "INDIVIDUAL" | "DEPARTMENT";
-  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "COMPLETED" | "ACTIVE" | "NOSHOW";
+  status: "PENDING" | "UPCOMING" | "ONGOING" | "APPROVED" | "REJECTED" | "CANCELLED" | "COMPLETED" | "ACTIVE" | "NOSHOW";
   startAt: string;
   endAt: string;
   notes: string | null;
@@ -66,8 +66,19 @@ export default function Bookings() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Fetch all bookings for the calendar (scope handled by backend)
-      const allRes = await fetch("/api/bookings?limit=100");
+
+      // Independent of each other — awaiting them in turn made the page wait out
+      // one round trip per list. Calendar scope is handled by the backend, and the
+      // approvals queue is only fetched for the roles that can act on it.
+      const canApprove = Boolean(role && role !== "EMPLOYEE");
+
+      const [allRes, myRes, pendingRes, assetRes] = await Promise.all([
+        fetch("/api/bookings?limit=100"),
+        fetch("/api/bookings/my?limit=50"),
+        canApprove ? fetch("/api/bookings?status=PENDING&limit=100") : null,
+        fetch("/api/assets/bookable"),
+      ]);
+
       if (allRes.status === 200) {
         const data = await allRes.json();
         if (data.success) {
@@ -75,8 +86,6 @@ export default function Bookings() {
         }
       }
 
-      // Fetch my bookings
-      const myRes = await fetch("/api/bookings/my?limit=50");
       if (myRes.status === 200) {
         const data = await myRes.json();
         if (data.success) {
@@ -84,27 +93,17 @@ export default function Bookings() {
         }
       }
 
-      // Fetch pending bookings for approval queue if not EMPLOYEE
-      if (role && role !== "EMPLOYEE") {
-        const pendingRes = await fetch("/api/bookings?status=PENDING&limit=100");
-        if (pendingRes.status === 200) {
-          const data = await pendingRes.json();
-          if (data.success) {
-            setPendingBookings(data.bookings);
-          }
+      if (pendingRes && pendingRes.status === 200) {
+        const data = await pendingRes.json();
+        if (data.success) {
+          setPendingBookings(data.bookings);
         }
       }
 
-      // Fetch bookable assets
-      const assetRes = await fetch("/api/assets?limit=100");
       if (assetRes.status === 200) {
         const data = await assetRes.json();
         if (data.success) {
-          // Filter to bookable category or explicit bookable flag
-          const filtered = data.assets.filter(
-            (a: any) => a.sharedBookable || a.category?.isBookable
-          );
-          setBookableAssets(filtered);
+          setBookableAssets(data.assets);
         }
       }
     } catch (e) {

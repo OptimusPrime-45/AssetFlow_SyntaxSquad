@@ -81,8 +81,18 @@ export default function Workflows() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Fetch maintenance requests
-      const reqRes = await fetch("/api/maintenance");
+
+      // Independent of each other — awaiting them in turn cost a round trip per list.
+      // Personnel only feed the manager "assign technician" dropdown.
+      const isManager = role === "ADMIN" || role === "ASSET_MANAGER";
+
+      const [reqRes, transRes, assetRes, empRes] = await Promise.all([
+        fetch("/api/maintenance"),
+        fetch("/api/transfers"),
+        fetch("/api/assets?limit=100"),
+        isManager ? fetch("/api/employees?limit=100") : null,
+      ]);
+
       if (reqRes.status === 200) {
         const data = await reqRes.json();
         if (data.success) {
@@ -90,8 +100,6 @@ export default function Workflows() {
         }
       }
 
-      // Fetch custody transfer requests
-      const transRes = await fetch("/api/transfers");
       if (transRes.status === 200) {
         const data = await transRes.json();
         if (data.success) {
@@ -99,8 +107,6 @@ export default function Workflows() {
         }
       }
 
-      // Fetch user's assets to report issues
-      const assetRes = await fetch("/api/assets?limit=100");
       if (assetRes.status === 200) {
         const data = await assetRes.json();
         if (data.success) {
@@ -108,14 +114,10 @@ export default function Workflows() {
         }
       }
 
-      // Fetch personnel to assign work (Managers only)
-      if (role === "ADMIN" || role === "ASSET_MANAGER") {
-        const empRes = await fetch("/api/employees?limit=100");
-        if (empRes.status === 200) {
-          const data = await empRes.json();
-          if (data.success) {
-            setEmployees(data.employees);
-          }
+      if (empRes && empRes.status === 200) {
+        const data = await empRes.json();
+        if (data.success) {
+          setEmployees(data.employees);
         }
       }
     } catch (e) {
