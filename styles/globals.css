@@ -1,0 +1,178 @@
+@import "tailwindcss";
+
+@theme {
+  /* Colors */
+  --color-surface: #FFFFFF;
+  --color-surface-dim: #dadad8;
+  --color-surface-bright: #f9f9f7;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f4f4f2;
+  --color-surface-container: #eeeeec;
+  --color-surface-container-high: #e8e8e6;
+  --color-surface-container-highest: #e2e3e1;
+  --color-on-surface: #1a1c1b;
+  --color-on-surface-variant: #424845;
+  --color-inverse-surface: #2f3130;
+  --color-inverse-on-surface: #f1f1ef;
+  --color-outline: #737875;
+  --color-outline-variant: #c3c8c3;
+  --color-surface-tint: #52625a;
+  
+  --color-primary: #52625a;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #c7d9cf;
+  --color-on-primary-container: #4f5f58;
+  --color-inverse-primary: #b9cbc1;
+  
+  --color-secondary: #5f5e5e;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #e5e2e1;
+  --color-on-secondary-container: #656464;
+  
+  --color-tertiary: #5e5e5e;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #d6d4d4;
+  --color-on-tertiary-container: #5b5b5b;
+  
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+  
+  --color-primary-fixed: #d5e7dd;
+  --color-primary-fixed-dim: #b9cbc1;
+  --color-on-primary-fixed: #0f1f18;
+  --color-on-primary-fixed-variant: #3a4a43;
+  --color-secondary-fixed: #e5e2e1;
+  --color-secondary-fixed-dim: #c8c6c5;
+  --color-on-secondary-fixed: #1c1b1b;
+  --color-on-secondary-fixed-variant: #474646;
+  --color-tertiary-fixed: #e4e2e2;
+  --color-tertiary-fixed-dim: #c7c6c6;
+  --color-on-tertiary-fixed: #1b1c1c;
+  --color-on-tertiary-fixed-variant: #464747;
+  
+  --color-background: #f9f9f7;
+  --color-on-background: #1a1c1b;
+  --color-surface-variant: #e2e3e1;
+  --color-paper: #FAFAF8;
+  --color-border-hairline: #E5E5E2;
+  --color-sage-hover: #AFC6B8;
+  
+  --color-status-available: #A8C69F;
+  --color-status-allocated: #9FB6C6;
+  --color-status-maintenance: #D9B88F;
+  --color-status-reserved: #B89FC6;
+  --color-status-retired: #BDBDBD;
+
+  /* Spacing */
+  --spacing-gutter: 24px;
+  --spacing-card-padding: 24px;
+  --spacing-container-padding: 40px;
+  --spacing-unit: 4px;
+  --spacing-section-margin: 64px;
+
+  /* Typography / Fonts */
+  --font-display-lg: var(--font-inter), sans-serif;
+  --font-body-md: var(--font-inter), sans-serif;
+  --font-stat-kpi: var(--font-inter), sans-serif;
+  --font-section-number: var(--font-jetbrains-mono), monospace;
+  --font-display-lg-italic: var(--font-source-serif), serif;
+  --font-body-lg: var(--font-inter), sans-serif;
+  --font-label-mono: var(--font-jetbrains-mono), monospace;
+  --font-headline-md: var(--font-inter), sans-serif;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-on-background);
+  -webkit-font-smoothing: antialiased;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.hover-reveal-arrow {
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.2s ease-in-out;
+}
+
+.hover-reveal-card:hover .hover-reveal-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.section-divider {
+  height: 1px;
+  background-color: var(--color-border-hairline);
+  width: 100%;
+}
+
+.row-hover-reveal .action-trigger {
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.2s ease-out;
+}
+
+.row-hover-reveal:hover .action-trigger {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-border-hairline);
+}
+
+.stat-card-border:hover {
+  border-color: var(--color-primary);
+}
+
+.reveal-arrow {
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.2s ease-in-out;
+}
+
+.hover-reveal-row:hover .reveal-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.kanban-column {
+  min-width: 300px;
+  flex: 1;
+}
+
+.step-active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--color-primary);
+}
+
+.chart-bar {
+  transition: height 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.kpi-number {
+  animation: countUp 1.5s ease-out forwards;
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
