@@ -5,9 +5,21 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="font-body-md text-on-surface bg-background selection:bg-primary-fixed selection:text-on-primary-fixed min-h-screen flex flex-col justify-between">
+    <div className="font-body-md text-on-surface bg-background selection:bg-primary-fixed selection:text-on-primary-fixed min-h-screen flex flex-col justify-between relative overflow-hidden">
+      {/* Background Cinematic Video Layer */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden opacity-30 w-screen h-screen">
+        <video
+          className="w-full h-full object-cover"
+          src="https://www.pexels.com/download/video/3977804/"
+          autoPlay
+          loop
+          muted
+          playsInline
+        />
+      </div>
+
       {/* Top Navbar */}
-      <nav className="w-full top-0 sticky bg-background border-b border-border-hairline z-50 flex justify-between items-center h-20 px-6 md:px-16 max-w-full mx-auto">
+      <nav className="w-full top-0 sticky bg-background/80 backdrop-blur-md border-b border-border-hairline z-50 flex justify-between items-center h-20 px-6 md:px-16 max-w-full mx-auto relative">
         <div className="font-display-lg text-[22px] font-bold tracking-tight text-on-surface">
           AssetFlow
         </div>
@@ -50,7 +62,7 @@ export default function Home() {
       </nav>
 
       {/* Main Content Area */}
-      <main className="flex-grow">
+      <main className="flex-grow relative z-10">
         {/* Hero Section */}
         <section className="px-6 md:px-16 pt-24 pb-20 max-w-7xl mx-auto">
           <div className="max-w-4xl">
@@ -209,14 +221,18 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right Desktop Image Mockup */}
+            {/* Right Desktop Video Showcase */}
             <div className="lg:col-span-7">
-              <div className="border border-border-hairline overflow-hidden bg-white shadow-sm flex items-center justify-center">
-                <img
-                  className="w-full h-auto object-cover block"
-                  alt="A computer setup showing the Aura Finance application dashboard inside a modern desk space."
-                  src="/image.png"
+              <div className="border border-border-hairline overflow-hidden bg-white shadow-sm flex items-center justify-center relative group">
+                <video
+                  className="w-full h-[400px] object-cover block transition-transform duration-700 group-hover:scale-105"
+                  src="https://www.pexels.com/download/video/7439776/"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
                 />
+                <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-all duration-300 pointer-events-none"></div>
               </div>
             </div>
           </div>
@@ -282,7 +298,7 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="w-full py-16 bg-[#fbfbfa] border-t border-border-hairline px-6 md:px-16">
+      <footer className="w-full py-16 bg-[#fbfbfa]/90 border-t border-border-hairline px-6 md:px-16 relative z-10">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12">
           {/* Brand Column */}
           <div className="flex flex-col justify-between gap-6">
