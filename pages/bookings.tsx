@@ -65,8 +65,15 @@ export default function Bookings() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Fetch all bookings for the calendar (scope handled by backend)
-      const allRes = await fetch("/api/bookings?limit=100");
+
+      // Independent of each other — awaiting them in turn made the page wait out
+      // three round trips instead of one. Calendar scope is handled by the backend.
+      const [allRes, myRes, assetRes] = await Promise.all([
+        fetch("/api/bookings?limit=100"),
+        fetch("/api/bookings/my?limit=50"),
+        fetch("/api/assets?limit=100"),
+      ]);
+
       if (allRes.status === 200) {
         const data = await allRes.json();
         if (data.success) {
@@ -74,8 +81,6 @@ export default function Bookings() {
         }
       }
 
-      // Fetch my bookings
-      const myRes = await fetch("/api/bookings/my?limit=50");
       if (myRes.status === 200) {
         const data = await myRes.json();
         if (data.success) {
@@ -83,8 +88,6 @@ export default function Bookings() {
         }
       }
 
-      // Fetch bookable assets
-      const assetRes = await fetch("/api/assets?limit=100");
       if (assetRes.status === 200) {
         const data = await assetRes.json();
         if (data.success) {
