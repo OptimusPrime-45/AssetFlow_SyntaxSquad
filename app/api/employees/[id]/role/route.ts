@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { checkAuth } from '@/lib/auth/rbac';
+import { syncHeadForNewRole } from '@/lib/org/head-sync';
 import { UserRole } from '@/app/generated/prisma/enums';
 import { z } from 'zod';
 
@@ -21,6 +22,7 @@ export async function PATCH(
   try {
     const employee = await prisma.employee.findFirst({
       where: { id, isDeleted: false },
+      include: { user: { select: { id: true, role: true } } },
     });
 
     if (!employee) {
@@ -42,19 +44,46 @@ export async function PATCH(
 
     const { role } = result.data;
 
-    // Update corresponding user's role
-    await prisma.user.update({
-      where: { id: employee.userId },
-      data: {
-        role: role as UserRole,
-      },
+    // A Department Head with no department would have a dept-scoped dashboard
+    // and no department to scope it to, so refuse rather than create that state.
+    if (role === 'DEPARTMENT_HEAD' && !employee.departmentId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Assign this employee to a department before promoting them to Department Head',
+        },
+        { status: 400 }
+      );
+    }
+
+    // An Admin demoting themselves could leave the org with no Admin at all.
+    if (employee.userId === auth.user.id && role !== 'ADMIN') {
+      return NextResponse.json(
+        { success: false, error: 'You cannot change your own role' },
+        { status: 400 }
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: employee.userId },
+        data: { role: role as UserRole },
+      });
+
+      // Keep department.headEmployeeId consistent with the new role.
+      await syncHeadForNewRole(tx, {
+        employeeId: id,
+        departmentId: employee.departmentId,
+        newRole: role,
+      });
     });
 
     const updatedEmployee = await prisma.employee.findUnique({
       where: { id },
       include: {
         department: {
-          select: { id: true, name: true, code: true }
+          select: { id: true, name: true, code: true, headEmployeeId: true }
         },
         user: {
           select: { id: true, email: true, role: true, status: true }

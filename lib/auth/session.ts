@@ -70,8 +70,11 @@ export async function verifySession() {
     return null;
   }
 
-  // Check if user is deleted or suspended
-  if (session.user.isDeleted || session.user.status === 'SUSPENDED') {
+  // Only a fully ACTIVE account may hold a session. Checking for ACTIVE rather
+  // than listing the bad statuses means deactivating a user (INACTIVE) or
+  // terminating them (SUSPENDED) kills their live sessions on the next request,
+  // instead of letting them work until the 7-day cookie expires.
+  if (session.user.isDeleted || session.user.status !== 'ACTIVE') {
     return null;
   }
 

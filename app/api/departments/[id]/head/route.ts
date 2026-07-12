@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { checkAuth } from '@/lib/auth/rbac';
+import { syncRolesForNewHead } from '@/lib/org/head-sync';
 import { z } from 'zod';
 
 const updateHeadSchema = z.object({
@@ -53,16 +54,28 @@ export async function PATCH(
       }
     }
 
-    const updatedDept = await prisma.department.update({
-      where: { id },
-      data: {
-        headEmployeeId,
-      },
-      include: {
-        headEmployee: {
-          select: { id: true, firstName: true, lastName: true, employeeCode: true, designation: true }
+    const updatedDept = await prisma.$transaction(async (tx) => {
+      const dept = await tx.department.update({
+        where: { id },
+        data: {
+          headEmployeeId,
+        },
+        include: {
+          headEmployee: {
+            select: { id: true, firstName: true, lastName: true, employeeCode: true, designation: true }
+          }
         }
-      }
+      });
+
+      // Heading a department *is* the DEPARTMENT_HEAD role — grant it to the
+      // incoming head and take it back from the outgoing one, or the new head
+      // would keep Employee permissions and approve nothing.
+      await syncRolesForNewHead(tx, {
+        previousHeadId: department.headEmployeeId,
+        newHeadId: headEmployeeId,
+      });
+
+      return dept;
     });
 
     return NextResponse.json({ success: true, department: updatedDept });
