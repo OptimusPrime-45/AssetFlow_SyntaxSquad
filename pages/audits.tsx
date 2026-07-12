@@ -128,7 +128,7 @@ export default function Audits() {
       if (cycleRes.status === 200) {
         const data = await cycleRes.json();
         if (data.success) {
-          setCycles(data.auditCycles);
+          setCycles(data.cycles || []);
         }
       }
 
@@ -334,6 +334,36 @@ export default function Audits() {
     }
   };
 
+  // Dismiss Discrepancy
+  const handleDismissDiscrepancy = async (discrepancyId: string) => {
+    const note = prompt("Please enter the reason for dismissing this discrepancy (optional):");
+    if (note === null) return; // User cancelled
+    setSubmitting(true);
+    setFormError(null);
+
+    try {
+      const res = await fetch(`/api/discrepancies/${discrepancyId}/dismiss`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resolutionNote: note || null }),
+      });
+
+      const data = await res.json();
+      setSubmitting(false);
+
+      if (res.status === 200 && data.success) {
+        if (selectedCycle) {
+          handleSelectCycle(selectedCycle);
+        }
+      } else {
+        alert(data.error || "Dismissal failed");
+      }
+    } catch (e) {
+      setSubmitting(false);
+      alert("A network error occurred.");
+    }
+  };
+
   // 5. Submit Auditor Assignment Complete
   const handleSubmitAssignment = async (cycleId: string) => {
     if (!confirm("Submit assignment? This locks your audit inputs and signals completion to the manager.")) return;
@@ -491,17 +521,29 @@ export default function Audits() {
                             <div key={disc.id} className="p-4 border border-border-hairline text-xs font-body-md">
                               <div className="flex justify-between items-start mb-2">
                                 <span className="font-bold text-on-surface leading-tight">{disc.asset.name} ({disc.asset.assetTag})</span>
-                                <span className={`px-2 py-0.5 text-[8px] font-label-mono font-bold ${disc.status === "RESOLVED" ? "bg-status-available/20 text-on-primary-container" : "bg-error-container text-on-error-container"}`}>{disc.status}</span>
+                                <span className={`px-2 py-0.5 text-[8px] font-label-mono font-bold ${
+                                  disc.status === "RESOLVED" ? "bg-status-available/20 text-on-primary-container" :
+                                  disc.status === "DISMISSED" ? "bg-surface-container-high text-secondary" :
+                                  "bg-error-container text-on-error-container"
+                                }`}>{disc.status}</span>
                               </div>
                               <p className="text-secondary text-[11px] mb-2">{disc.details}</p>
                               {disc.status === "OPEN" && (
-                                <div className="text-right">
+                                <div className="text-right space-x-2">
                                   <button onClick={() => { setActiveDiscrepancy(disc); setIsResolveModalOpen(true); }} className="bg-primary text-white px-3 py-1 font-label-mono text-[9px] uppercase tracking-wider hover:bg-opacity-95 cursor-pointer">Resolve Mismatch</button>
+                                  {(role === "ADMIN" || role === "ASSET_MANAGER") && (
+                                    <button onClick={() => handleDismissDiscrepancy(disc.id)} className="border border-secondary text-secondary px-3 py-1 font-label-mono text-[9px] uppercase tracking-wider hover:bg-secondary/5 cursor-pointer">Dismiss</button>
+                                  )}
                                 </div>
                               )}
                               {disc.status === "RESOLVED" && (
                                 <div className="mt-2 pt-2 border-t border-border-hairline text-[10px] text-secondary font-label-mono">
                                   Resolved By: {disc.resolvedBy?.firstName} · Note: {disc.resolutionNote}
+                                </div>
+                              )}
+                              {disc.status === "DISMISSED" && (
+                                <div className="mt-2 pt-2 border-t border-border-hairline text-[10px] text-secondary font-label-mono">
+                                  Dismissed By: {disc.resolvedBy?.firstName || "Admin"} · Note: {disc.resolutionNote}
                                 </div>
                               )}
                             </div>

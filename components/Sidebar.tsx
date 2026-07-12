@@ -31,7 +31,7 @@ export default function Sidebar({ activePage }: SidebarProps) {
       label: "§ 03 · Bookings",
       icon: "calendar_today",
       href: "/bookings",
-      roles: ["ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
+      roles: ["ADMIN", "ASSET_MANAGER", "DEPARTMENT_HEAD", "EMPLOYEE"],
     },
     {
       id: "workflows",

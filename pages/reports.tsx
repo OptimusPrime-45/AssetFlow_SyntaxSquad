@@ -3,24 +3,197 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
+import Header from "@/components/Header";
+import { useAuth } from "@/lib/context/AuthContext";
+
+interface AssetUtilization {
+  categoryId: string;
+  categoryName: string;
+  categoryCode: string;
+  totalAssets: number;
+  allocatedAssets: number;
+  availableAssets: number;
+  underMaintenanceAssets: number;
+  utilizationRate: number;
+}
+
+interface CategoryMaintenance {
+  categoryId: string;
+  categoryName: string;
+  categoryCode: string;
+  totalRequests: number;
+  resolvedRequests: number;
+  pendingRequests: number;
+  activeRequests: number;
+  averageDowntimeHours: number;
+}
+
+interface TopMaintainedAsset {
+  asset: {
+    id: string;
+    name: string;
+    assetTag: string;
+    location: string | null;
+    status: string;
+  };
+  requestCount: number;
+}
+
+interface OpenMaintenanceRequest {
+  id: string;
+  assetId: string;
+  priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  status: string;
+  issueTitle: string;
+  requestedAt: string;
+  asset: {
+    id: string;
+    name: string;
+    assetTag: string;
+    condition: string;
+    status: string;
+  };
+  requestedBy: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+}
+
+interface AtRiskAsset {
+  id: string;
+  name: string;
+  assetTag: string;
+  category: string;
+  condition: string;
+  status: string;
+  maintenanceCount: number;
+}
+
+interface DepartmentAllocation {
+  departmentId: string;
+  departmentName: string;
+  departmentCode: string;
+  totalAssetsCount: number;
+  totalAssetValue: number;
+  directAllocationsCount: number;
+  employeeAllocationsCount: number;
+  totalActiveAllocations: number;
+}
+
+interface BookingHeatmapCell {
+  dayOfWeek: number;
+  hourOfDay: number;
+  count: number;
+}
 
 export default function Reports() {
-  const [animate, setAnimate] = useState(false);
+  const { user, role, loading: authLoading } = useAuth();
+
+  // Active Report Tab
+  const [activeReportTab, setActiveReportTab] = useState<"utilization" | "maintenance" | "preventive" | "allocation" | "heatmap">("utilization");
+  
+  // Data States
+  const [utilizationData, setUtilizationData] = useState<AssetUtilization[]>([]);
+  const [maintenanceData, setMaintenanceData] = useState<{ byCategory: CategoryMaintenance[]; topMaintainedAssets: TopMaintainedAsset[] }>({ byCategory: [], topMaintainedAssets: [] });
+  const [preventiveData, setPreventiveData] = useState<{ openRequests: OpenMaintenanceRequest[]; atRiskAssets: AtRiskAsset[] }>({ openRequests: [], atRiskAssets: [] });
+  const [departmentData, setDepartmentData] = useState<DepartmentAllocation[]>([]);
+  const [heatmapData, setHeatmapData] = useState<{ heatmap: BookingHeatmapCell[]; byCategory: Record<string, number> }>({ heatmap: [], byCategory: {} });
+  
+  const [loadingReports, setLoadingReports] = useState(true);
+
+  const fetchReports = async () => {
+    try {
+      setLoadingReports(true);
+      
+      // Fetch utilization
+      const utilRes = await fetch("/api/reports/asset-utilization");
+      if (utilRes.status === 200) {
+        const data = await utilRes.json();
+        if (data.success) setUtilizationData(data.utilization || []);
+      }
+
+      // Fetch maintenance
+      const maintRes = await fetch("/api/reports/maintenance-frequency");
+      if (maintRes.status === 200) {
+        const data = await maintRes.json();
+        if (data.success) {
+          setMaintenanceData({
+            byCategory: data.byCategory || [],
+            topMaintainedAssets: data.topMaintainedAssets || []
+          });
+        }
+      }
+
+      // Fetch preventive
+      const prevRes = await fetch("/api/reports/preventive-maintenance");
+      if (prevRes.status === 200) {
+        const data = await prevRes.json();
+        if (data.success) {
+          setPreventiveData({
+            openRequests: data.openRequests || [],
+            atRiskAssets: data.atRiskAssets || []
+          });
+        }
+      }
+
+      // Fetch department allocations
+      const deptRes = await fetch("/api/reports/department-allocation");
+      if (deptRes.status === 200) {
+        const data = await deptRes.json();
+        if (data.success) setDepartmentData(data.departmentAllocations || []);
+      }
+
+      // Fetch booking heatmap
+      const heatRes = await fetch("/api/reports/booking-heatmap");
+      if (heatRes.status === 200) {
+        const data = await heatRes.json();
+        if (data.success) {
+          setHeatmapData({
+            heatmap: data.heatmap || [],
+            byCategory: data.byCategory || {}
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching reports:", e);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
 
   useEffect(() => {
-    // Trigger height transition shortly after mounting
-    const timer = setTimeout(() => setAnimate(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
+    if (user && (role === "ADMIN" || role === "ASSET_MANAGER")) {
+      fetchReports();
+    }
+  }, [user, role]);
 
-  const chartData = [
-    { label: "JAN", primaryHeight: "160px", secondaryHeight: "48px" },
-    { label: "FEB", primaryHeight: "128px", secondaryHeight: "64px" },
-    { label: "MAR", primaryHeight: "192px", secondaryHeight: "96px" },
-    { label: "APR", primaryHeight: "144px", secondaryHeight: "80px" },
-    { label: "MAY", primaryHeight: "208px", secondaryHeight: "112px" },
-    { label: "JUN", primaryHeight: "176px", secondaryHeight: "48px" },
-  ];
+  if (authLoading || (loadingReports && utilizationData.length === 0)) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center font-label-mono text-xs uppercase tracking-widest text-secondary">
+        Retrieving system metrics...
+      </div>
+    );
+  }
+
+  if (role !== "ADMIN" && role !== "ASSET_MANAGER") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center font-label-mono text-xs uppercase tracking-widest text-error">
+        Access Denied: Administrative Clearance Required
+      </div>
+    );
+  }
+
+  // Helper for heatmap cell color intensity
+  const getHeatmapColor = (count: number) => {
+    if (count === 0) return "bg-surface-container-low hover:bg-surface-container-high";
+    if (count < 2) return "bg-primary/20 hover:bg-primary/30";
+    if (count < 5) return "bg-primary/45 hover:bg-primary/55";
+    if (count < 10) return "bg-primary/70 hover:bg-primary/80";
+    return "bg-primary text-on-primary hover:opacity-90";
+  };
+
+  const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   return (
     <div className="min-h-screen bg-background text-on-surface font-body-md selection:bg-primary-container">
@@ -28,312 +201,431 @@ export default function Reports() {
       <Sidebar activePage="reports" />
 
       {/* Main Content Area */}
-      <main className="ml-64 min-h-screen px-container-padding py-section-margin flex flex-col justify-between">
+      <main className="ml-64 min-h-screen px-container-padding py-12 flex flex-col justify-between">
         <div>
+          {/* Header Bar */}
+          <Header section="Analytics Engine" />
+
           {/* Header Section */}
-          <header className="mb-section-margin flex justify-between items-end">
+          <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
             <div>
-              <p className="font-section-number text-section-number text-primary mb-2 text-xs font-semibold">
-                § 05 · ANALYTICS ENGINE
+              <p className="font-label-mono text-label-mono text-secondary uppercase tracking-[0.2em] mb-2 flex items-center text-xs font-semibold">
+                <span className="text-primary font-bold">§ 06</span>
+                <span className="mx-2 opacity-30">·</span>
+                ANALYTICS ENGINE
               </p>
               <h1 className="font-display-lg text-display-lg text-on-surface font-bold tracking-tight">
                 Deep <span className="font-display-lg-italic italic text-primary font-normal">insights</span>.
               </h1>
             </div>
-            <div className="flex gap-4 pb-2 text-xs">
-              <button className="px-6 py-2 border border-border-hairline font-label-mono text-label-mono uppercase tracking-widest hover:border-primary transition-all flex items-center gap-2 cursor-pointer bg-white">
-                <span className="material-symbols-outlined text-[18px]">calendar_today</span>
-                Last 30 Days
-              </button>
-              <button className="px-6 py-2 bg-primary text-surface font-label-mono text-label-mono uppercase tracking-widest hover:bg-opacity-90 transition-all flex items-center gap-2 cursor-pointer text-white">
+            <div className="flex gap-4 pb-2 text-xs items-center self-stretch md:self-auto justify-end">
+              <select 
+                id="export-select"
+                className="px-4 py-2.5 border border-border-hairline bg-white font-label-mono uppercase text-[11px] tracking-wider focus:outline-none cursor-pointer"
+                defaultValue="utilization"
+              >
+                <option value="utilization">Asset Utilization</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="allocation">Department Allocations</option>
+                <option value="bookings">Resource Bookings</option>
+              </select>
+              <button 
+                onClick={() => {
+                  const select = document.getElementById("export-select") as HTMLSelectElement;
+                  const type = select?.value || "utilization";
+                  window.open(`/api/reports/export?type=${type}`, "_blank");
+                }}
+                className="px-6 py-2.5 bg-primary text-white font-label-mono text-label-mono uppercase tracking-widest hover:bg-opacity-90 transition-all flex items-center gap-2 cursor-pointer font-bold border-0 text-xs"
+              >
                 <span className="material-symbols-outlined text-[18px]">download</span>
-                Export PDF
+                Export CSV
               </button>
             </div>
           </header>
 
-          {/* KPI Strip */}
-          <section className="grid grid-cols-1 md:grid-cols-4 gap-gutter mb-section-margin">
-            {/* KPI 1 */}
-            <div className="bg-surface border border-border-hairline p-card-padding group hover:border-primary transition-all">
-              <div className="kpi-number font-stat-kpi text-stat-kpi text-on-surface mb-2 tabular-nums font-bold">
-                12.4M
+          {/* Sub Tab Navigation */}
+          <div className="flex border-b border-border-hairline mb-8 text-xs font-label-mono uppercase tracking-widest text-secondary font-semibold">
+            <button
+              onClick={() => setActiveReportTab("utilization")}
+              className={`px-6 py-4 border-b-2 transition-all cursor-pointer ${
+                activeReportTab === "utilization" ? "border-primary text-on-surface font-bold" : "border-transparent opacity-60 hover:opacity-100"
+              }`}
+            >
+              Asset Utilization
+            </button>
+            <button
+              onClick={() => setActiveReportTab("maintenance")}
+              className={`px-6 py-4 border-b-2 transition-all cursor-pointer ${
+                activeReportTab === "maintenance" ? "border-primary text-on-surface font-bold" : "border-transparent opacity-60 hover:opacity-100"
+              }`}
+            >
+              Maintenance Frequency
+            </button>
+            <button
+              onClick={() => setActiveReportTab("preventive")}
+              className={`px-6 py-4 border-b-2 transition-all cursor-pointer ${
+                activeReportTab === "preventive" ? "border-primary text-on-surface font-bold" : "border-transparent opacity-60 hover:opacity-100"
+              }`}
+            >
+              Preventive Maintenance
+            </button>
+            <button
+              onClick={() => setActiveReportTab("allocation")}
+              className={`px-6 py-4 border-b-2 transition-all cursor-pointer ${
+                activeReportTab === "allocation" ? "border-primary text-on-surface font-bold" : "border-transparent opacity-60 hover:opacity-100"
+              }`}
+            >
+              Department Summary
+            </button>
+            <button
+              onClick={() => setActiveReportTab("heatmap")}
+              className={`px-6 py-4 border-b-2 transition-all cursor-pointer ${
+                activeReportTab === "heatmap" ? "border-primary text-on-surface font-bold" : "border-transparent opacity-60 hover:opacity-100"
+              }`}
+            >
+              Booking Heatmap
+            </button>
+          </div>
+
+          {/* Tab 1: Asset Utilization */}
+          {activeReportTab === "utilization" && (
+            <div className="bg-white border border-border-hairline p-6">
+              <div className="font-label-mono text-xs uppercase tracking-wider text-secondary font-bold pb-2 border-b border-border-hairline mb-4">
+                Asset Category Utilization Rates
               </div>
-              <p className="font-label-mono text-label-mono text-on-surface-variant uppercase tracking-widest text-xs">
-                Total Assets
-              </p>
-              <div className="mt-4 flex items-center text-status-available font-label-mono text-[10px] font-semibold">
-                <span className="material-symbols-outlined text-[14px] mr-1">trending_up</span>
-                +4.2% VS PREV.
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left border-collapse min-w-max text-xs font-body-md">
+                  <thead>
+                    <tr className="border-b border-border-hairline bg-surface-container-low text-secondary font-label-mono uppercase font-bold">
+                      <th className="px-gutter py-4">Category Code</th>
+                      <th className="px-gutter py-4">Category Name</th>
+                      <th className="px-gutter py-4 text-center">Total Assets</th>
+                      <th className="px-gutter py-4 text-center">Allocated</th>
+                      <th className="px-gutter py-4 text-center">Available</th>
+                      <th className="px-gutter py-4 text-center">Under Maintenance</th>
+                      <th className="px-gutter py-4 text-right">Utilization Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-hairline">
+                    {utilizationData.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-gutter py-8 text-center text-secondary">
+                          No asset categories registered.
+                        </td>
+                      </tr>
+                    ) : (
+                      utilizationData.map((row) => (
+                        <tr key={row.categoryId} className="hover:bg-surface-container-lowest transition-colors">
+                          <td className="px-gutter py-4 font-label-mono font-bold uppercase">{row.categoryCode}</td>
+                          <td className="px-gutter py-4 font-bold">{row.categoryName}</td>
+                          <td className="px-gutter py-4 text-center font-label-mono">{row.totalAssets}</td>
+                          <td className="px-gutter py-4 text-center font-label-mono text-status-allocated font-semibold">{row.allocatedAssets}</td>
+                          <td className="px-gutter py-4 text-center font-label-mono text-status-available font-semibold">{row.availableAssets}</td>
+                          <td className="px-gutter py-4 text-center font-label-mono text-status-maintenance font-semibold">{row.underMaintenanceAssets}</td>
+                          <td className="px-gutter py-4 text-right">
+                            <div className="flex items-center justify-end gap-3">
+                              <div className="w-24 bg-surface-container-high h-2 rounded-full overflow-hidden hidden sm:block">
+                                <div 
+                                  style={{ width: `${row.utilizationRate}%` }} 
+                                  className="h-full bg-primary"
+                                />
+                              </div>
+                              <span className="font-label-mono font-bold text-sm">{row.utilizationRate.toFixed(1)}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
+          )}
 
-            {/* KPI 2 */}
-            <div className="bg-surface border border-border-hairline p-card-padding group hover:border-primary transition-all">
-              <div className="kpi-number font-stat-kpi text-stat-kpi text-on-surface mb-2 tabular-nums font-bold">
-                0.82<span className="text-display-lg font-normal text-2xl">%</span>
-              </div>
-              <p className="font-label-mono text-label-mono text-on-surface-variant uppercase tracking-widest text-xs">
-                Liquidity Ratio
-              </p>
-              <div className="mt-4 flex items-center text-secondary font-label-mono text-[10px] font-semibold">
-                <span className="material-symbols-outlined text-[14px] mr-1">trending_flat</span>
-                STABLE
-              </div>
-            </div>
-
-            {/* KPI 3 */}
-            <div className="bg-surface border border-border-hairline p-card-padding group hover:border-primary transition-all">
-              <div className="kpi-number font-stat-kpi text-stat-kpi text-on-surface mb-2 tabular-nums font-bold">
-                842
-              </div>
-              <p className="font-label-mono text-label-mono text-on-surface-variant uppercase tracking-widest text-xs">
-                Active Flows
-              </p>
-              <div className="mt-4 flex items-center text-status-available font-label-mono text-[10px] font-semibold">
-                <span className="material-symbols-outlined text-[14px] mr-1">check_circle</span>
-                12 COMPLETED TODAY
-              </div>
-            </div>
-
-            {/* KPI 4 */}
-            <div className="bg-surface border border-border-hairline p-card-padding group hover:border-primary transition-all">
-              <div className="kpi-number font-stat-kpi text-stat-kpi text-on-surface mb-2 tabular-nums font-bold">
-                2.4<span className="text-display-lg font-normal text-2xl">s</span>
-              </div>
-              <p className="font-label-mono text-label-mono text-on-surface-variant uppercase tracking-widest text-xs">
-                Avg Settlement
-              </p>
-              <div className="mt-4 flex items-center text-primary font-label-mono text-[10px] font-semibold">
-                <span className="material-symbols-outlined text-[14px] mr-1">speed</span>
-                OPTIMIZED
-              </div>
-            </div>
-          </section>
-
-          {/* Bento Grid Charts */}
-          <section className="grid grid-cols-12 gap-gutter mb-section-margin">
-            {/* Main Chart Card */}
-            <div className="col-span-12 lg:col-span-8 bg-surface border border-border-hairline p-card-padding">
-              <div className="flex justify-between items-start mb-12">
-                <div>
-                  <h3 className="font-label-mono text-label-mono text-on-surface uppercase tracking-widest mb-1 text-xs font-semibold">
-                    Asset Allocation Variance
-                  </h3>
-                  <p className="text-[12px] text-on-surface-variant opacity-60">
-                    Distribution across primary institutional vaults.
-                  </p>
+          {/* Tab 2: Maintenance Frequency */}
+          {activeReportTab === "maintenance" && (
+            <div className="grid grid-cols-12 gap-gutter items-start">
+              {/* Left Side: Category Summary */}
+              <div className="col-span-12 lg:col-span-7 bg-white border border-border-hairline p-6">
+                <div className="font-label-mono text-xs uppercase tracking-wider text-secondary font-bold pb-2 border-b border-border-hairline mb-4">
+                  Maintenance Metrics by Category
                 </div>
-                <div className="flex gap-2 text-xs font-label-mono">
-                  <span className="w-3 h-3 bg-primary"></span>
-                  <span className="uppercase text-[10px]">Primary</span>
-                  <span className="w-3 h-3 bg-secondary-fixed ml-4"></span>
-                  <span className="uppercase text-[10px]">Secondary</span>
-                </div>
-              </div>
-
-              {/* Chart Component */}
-              <div className="h-64 flex items-end justify-between gap-4 px-2 border-b border-border-hairline relative mb-2">
-                {/* Grid Lines */}
-                <div className="absolute inset-x-0 top-0 border-t border-border-hairline opacity-20"></div>
-                <div className="absolute inset-x-0 top-1/4 border-t border-border-hairline opacity-20"></div>
-                <div className="absolute inset-x-0 top-2/4 border-t border-border-hairline opacity-20"></div>
-                <div className="absolute inset-x-0 top-3/4 border-t border-border-hairline opacity-20"></div>
-
-                {/* Bars */}
-                {chartData.map((data, idx) => (
-                  <div key={idx} className="flex-1 flex flex-col items-center gap-1 group">
-                    <div
-                      style={{
-                        height: animate ? data.secondaryHeight : "0px",
-                      }}
-                      className="w-full bg-secondary-container chart-bar group-hover:bg-primary-fixed transition-all duration-[1000ms]"
-                    ></div>
-                    <div
-                      style={{
-                        height: animate ? data.primaryHeight : "0px",
-                      }}
-                      className="w-full bg-primary chart-bar group-hover:bg-primary-fixed-dim transition-all duration-[1000ms]"
-                    ></div>
-                    <span className="font-label-mono text-[10px] mt-4 opacity-40">{data.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Workflow Efficiency Card */}
-            <div className="col-span-12 lg:col-span-4 bg-surface border border-border-hairline p-card-padding flex flex-col">
-              <h3 className="font-label-mono text-label-mono text-on-surface uppercase tracking-widest mb-8 text-xs font-semibold">
-                Workflow Efficiency
-              </h3>
-              <div className="flex-1 flex flex-col justify-center gap-6">
-                <div>
-                  <div className="flex justify-between font-label-mono text-[10px] mb-2 uppercase tracking-tighter">
-                    <span>Automation Engine</span>
-                    <span className="text-primary font-bold">94%</span>
-                  </div>
-                  <div className="w-full h-1 bg-surface-container-high">
-                    <div
-                      style={{ width: animate ? "94%" : "0%" }}
-                      className="h-full bg-primary transition-all duration-1000"
-                    ></div>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between font-label-mono text-[10px] mb-2 uppercase tracking-tighter">
-                    <span>Manual Review</span>
-                    <span className="text-primary font-bold">06%</span>
-                  </div>
-                  <div className="w-full h-1 bg-surface-container-high">
-                    <div
-                      style={{ width: animate ? "6%" : "0%" }}
-                      className="h-full bg-primary transition-all duration-1000"
-                    ></div>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-border-hairline">
-                  <p className="text-[12px] leading-relaxed text-on-surface-variant italic">
-                    "Current cycle demonstrates a significant shift towards autonomous settlement, reducing
-                    operational friction by 18% month-over-month."
-                  </p>
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left border-collapse min-w-max text-xs font-body-md">
+                    <thead>
+                      <tr className="border-b border-border-hairline bg-surface-container-low text-secondary font-label-mono uppercase font-bold">
+                        <th className="px-gutter py-4">Category</th>
+                        <th className="px-gutter py-4 text-center">Total Tickets</th>
+                        <th className="px-gutter py-4 text-center">Resolved</th>
+                        <th className="px-gutter py-4 text-center">Active</th>
+                        <th className="px-gutter py-4 text-center">Pending</th>
+                        <th className="px-gutter py-4 text-right">Avg Downtime</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-hairline">
+                      {maintenanceData.byCategory.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-gutter py-8 text-center text-secondary">
+                            No maintenance logs recorded.
+                          </td>
+                        </tr>
+                      ) : (
+                        maintenanceData.byCategory.map((row) => (
+                          <tr key={row.categoryId} className="hover:bg-surface-container-lowest transition-colors">
+                            <td className="px-gutter py-4">
+                              <span className="font-bold block">{row.categoryName}</span>
+                              <span className="font-label-mono text-[10px] text-secondary uppercase">{row.categoryCode}</span>
+                            </td>
+                            <td className="px-gutter py-4 text-center font-label-mono">{row.totalRequests}</td>
+                            <td className="px-gutter py-4 text-center font-label-mono text-status-available font-semibold">{row.resolvedRequests}</td>
+                            <td className="px-gutter py-4 text-center font-label-mono text-status-allocated font-semibold">{row.activeRequests}</td>
+                            <td className="px-gutter py-4 text-center font-label-mono text-status-maintenance font-semibold">{row.pendingRequests}</td>
+                            <td className="px-gutter py-4 text-right font-label-mono font-bold">{row.averageDowntimeHours.toFixed(1)} hrs</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            </div>
-          </section>
 
-          {/* Detailed Ledger Table */}
-          <section className="bg-surface border border-border-hairline">
-            <div className="p-gutter border-b border-border-hairline flex justify-between items-center">
-              <h3 className="font-label-mono text-label-mono text-on-surface uppercase tracking-widest text-xs font-semibold">
-                Recent Activity Ledger
-              </h3>
-              <span className="material-symbols-outlined text-[20px] text-on-surface-variant cursor-pointer hover:text-primary transition-colors">
-                filter_list
-              </span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-border-hairline text-xs">
-                    <th className="px-gutter py-4 font-label-mono text-[10px] text-on-surface-variant uppercase tracking-widest">
-                      Reference ID
-                    </th>
-                    <th className="px-gutter py-4 font-label-mono text-[10px] text-on-surface-variant uppercase tracking-widest">
-                      Asset Class
-                    </th>
-                    <th className="px-gutter py-4 font-label-mono text-[10px] text-on-surface-variant uppercase tracking-widest">
-                      Volume (ETH)
-                    </th>
-                    <th className="px-gutter py-4 font-label-mono text-[10px] text-on-surface-variant uppercase tracking-widest">
-                      Status
-                    </th>
-                    <th className="px-gutter py-4 font-label-mono text-[10px] text-on-surface-variant uppercase tracking-widest">
-                      Temporal Log
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border-hairline">
-                  <tr className="hover:bg-surface-container-low transition-colors group cursor-pointer text-sm">
-                    <td className="px-gutter py-5 font-label-mono text-[13px] text-on-surface">
-                      #AF-90210-X
-                    </td>
-                    <td className="px-gutter py-5 text-[14px]">Sovereign Bond Flow</td>
-                    <td className="px-gutter py-5 font-label-mono tabular-nums">420.00</td>
-                    <td className="px-gutter py-5">
-                      <span className="px-2 py-0.5 bg-status-available/10 text-status-available font-label-mono text-[9px] uppercase font-bold">
-                        Settled
-                      </span>
-                    </td>
-                    <td className="px-gutter py-5 font-label-mono text-[12px] opacity-40">
-                      2024.05.12 14:22:11
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-surface-container-low transition-colors group cursor-pointer text-sm">
-                    <td className="px-gutter py-5 font-label-mono text-[13px] text-on-surface">
-                      #AF-88321-Y
-                    </td>
-                    <td className="px-gutter py-5 text-[14px]">Private Equity Index</td>
-                    <td className="px-gutter py-5 font-label-mono tabular-nums">1,240.50</td>
-                    <td className="px-gutter py-5">
-                      <span className="px-2 py-0.5 bg-status-allocated/10 text-status-allocated font-label-mono text-[9px] uppercase font-bold">
-                        Allocated
-                      </span>
-                    </td>
-                    <td className="px-gutter py-5 font-label-mono text-[12px] opacity-40">
-                      2024.05.12 13:04:05
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-surface-container-low transition-colors group cursor-pointer text-sm">
-                    <td className="px-gutter py-5 font-label-mono text-[13px] text-on-surface">
-                      #AF-74112-Z
-                    </td>
-                    <td className="px-gutter py-5 text-[14px]">Treasury Yield Lock</td>
-                    <td className="px-gutter py-5 font-label-mono tabular-nums">98.15</td>
-                    <td className="px-gutter py-5">
-                      <span className="px-2 py-0.5 bg-status-maintenance/10 text-status-maintenance font-label-mono text-[9px] uppercase font-bold">
-                        Review
-                      </span>
-                    </td>
-                    <td className="px-gutter py-5 font-label-mono text-[12px] opacity-40">
-                      2024.05.12 11:45:59
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-surface-container-low transition-colors group cursor-pointer text-sm">
-                    <td className="px-gutter py-5 font-label-mono text-[13px] text-on-surface">
-                      #AF-66231-M
-                    </td>
-                    <td className="px-gutter py-5 text-[14px]">Synthetic Liquidity Pair</td>
-                    <td className="px-gutter py-5 font-label-mono tabular-nums">3,110.00</td>
-                    <td className="px-gutter py-5">
-                      <span className="px-2 py-0.5 bg-status-available/10 text-status-available font-label-mono text-[9px] uppercase font-bold">
-                        Settled
-                      </span>
-                    </td>
-                    <td className="px-gutter py-5 font-label-mono text-[12px] opacity-40">
-                      2024.05.12 09:12:44
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* Table Pagination */}
-            <div className="p-gutter flex justify-between items-center bg-surface-container-lowest text-xs">
-              <p className="font-label-mono text-[10px] text-on-surface-variant opacity-50 uppercase">
-                Showing 4 of 2,840 records
-              </p>
-              <div className="flex gap-4">
-                <button className="font-label-mono text-[10px] uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity flex items-center cursor-pointer">
-                  <span className="material-symbols-outlined text-[14px] mr-1">chevron_left</span> Previous
-                </button>
-                <button className="font-label-mono text-[10px] uppercase tracking-widest hover:text-primary transition-colors flex items-center cursor-pointer">
-                  Next <span className="material-symbols-outlined text-[14px] ml-1">chevron_right</span>
-                </button>
+              {/* Right Side: Top Maintained Assets */}
+              <div className="col-span-12 lg:col-span-5 bg-white border border-border-hairline p-6">
+                <div className="font-label-mono text-xs uppercase tracking-wider text-secondary font-bold pb-2 border-b border-border-hairline mb-4 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm">construction</span>
+                  Most Repaired Assets (Top 5)
+                </div>
+                {maintenanceData.topMaintainedAssets.length === 0 ? (
+                  <p className="text-secondary text-xs italic py-6">No assets have required repairs yet.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {maintenanceData.topMaintainedAssets.map((item, idx) => (
+                      <div key={item.asset.id} className="text-xs p-3.5 border border-border-hairline bg-surface flex justify-between items-center">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-bold text-on-surface leading-tight">{item.asset.name}</span>
+                            <span className="font-label-mono text-[9px] uppercase text-secondary bg-surface-container-high px-1.5 py-0.5">{item.asset.assetTag}</span>
+                          </div>
+                          <p className="text-secondary text-[10px]">Location: {item.asset.location || "—"} · Status: {item.asset.status}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-label-mono text-sm font-bold text-error bg-error-container/20 px-2.5 py-1">{item.requestCount} Fixes</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
-          </section>
+          )}
+
+          {/* Tab 3: Preventive Maintenance */}
+          {activeReportTab === "preventive" && (
+            <div className="grid grid-cols-12 gap-gutter items-start">
+              {/* Left Side: At Risk Assets */}
+              <div className="col-span-12 lg:col-span-6 bg-white border border-border-hairline p-6">
+                <div className="font-label-mono text-xs uppercase tracking-wider text-secondary font-bold pb-2 border-b border-border-hairline mb-4 flex items-center gap-1.5 text-error">
+                  <span className="material-symbols-outlined text-sm">warning</span>
+                  At-Risk Assets (Damaged or Repeated Fixes)
+                </div>
+                {preventiveData.atRiskAssets.length === 0 ? (
+                  <p className="text-secondary text-xs italic py-6">No assets flagged in critical/at-risk states.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {preventiveData.atRiskAssets.map((asset) => (
+                      <div key={asset.id} className="p-3 border border-error/20 bg-error-container/5 text-xs font-body-md">
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="font-bold text-on-surface">{asset.name}</span>
+                          <span className="font-label-mono text-[9px] uppercase text-secondary bg-surface-container-high px-1.5 py-0.5">{asset.assetTag}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-[10px] text-secondary">
+                          <span>Category: {asset.category} · Condition: <strong className="text-error">{asset.condition}</strong></span>
+                          <span className="font-label-mono font-bold text-error">{asset.maintenanceCount} Past repairs</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Right Side: Open Maintenance Tickets */}
+              <div className="col-span-12 lg:col-span-6 bg-white border border-border-hairline p-6">
+                <div className="font-label-mono text-xs uppercase tracking-wider text-secondary font-bold pb-2 border-b border-border-hairline mb-4 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm">hourglass_empty</span>
+                  Active Repairs Queue ({preventiveData.openRequests.length})
+                </div>
+                {preventiveData.openRequests.length === 0 ? (
+                  <p className="text-secondary text-xs italic py-6">No active maintenance tickets in process.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {preventiveData.openRequests.map((req) => (
+                      <div key={req.id} className="p-3 border border-border-hairline bg-surface text-xs font-body-md">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <span className="font-bold block leading-tight">{req.issueTitle}</span>
+                            <span className="text-[10px] text-secondary font-label-mono">Asset: {req.asset.name} ({req.asset.assetTag})</span>
+                          </div>
+                          <span className={`px-2 py-0.5 text-[9px] font-label-mono font-bold uppercase ${
+                            req.priority === "CRITICAL" ? "bg-error text-white" :
+                            req.priority === "HIGH" ? "bg-error-container text-on-error-container" :
+                            req.priority === "MEDIUM" ? "bg-status-maintenance/20 text-on-tertiary-container" : "bg-surface-container-high text-secondary"
+                          }`}>{req.priority}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-[10px] text-secondary pt-2 border-t border-border-hairline/60">
+                          <span>Reported By: {req.requestedBy.firstName} {req.requestedBy.lastName}</span>
+                          <span className="font-label-mono">Date: {new Date(req.requestedAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Tab 4: Department Summary */}
+          {activeReportTab === "allocation" && (
+            <div className="bg-white border border-border-hairline p-6">
+              <div className="font-label-mono text-xs uppercase tracking-wider text-secondary font-bold pb-2 border-b border-border-hairline mb-4">
+                Department Asset Allocation &amp; Portfolio Value
+              </div>
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left border-collapse min-w-max text-xs font-body-md">
+                  <thead>
+                    <tr className="border-b border-border-hairline bg-surface-container-low text-secondary font-label-mono uppercase font-bold">
+                      <th className="px-gutter py-4">Dept Code</th>
+                      <th className="px-gutter py-4">Department Name</th>
+                      <th className="px-gutter py-4 text-center">Total Inventory Assets</th>
+                      <th className="px-gutter py-4 text-center">Direct Allocations</th>
+                      <th className="px-gutter py-4 text-center">Personnel Allocations</th>
+                      <th className="px-gutter py-4 text-center">Total Active Allocations</th>
+                      <th className="px-gutter py-4 text-right">Portfolio Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-hairline">
+                    {departmentData.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-gutter py-8 text-center text-secondary">
+                          No department metrics processed.
+                        </td>
+                      </tr>
+                    ) : (
+                      departmentData.map((row) => (
+                        <tr key={row.departmentId} className="hover:bg-surface-container-lowest transition-colors">
+                          <td className="px-gutter py-4 font-label-mono font-bold uppercase">{row.departmentCode}</td>
+                          <td className="px-gutter py-4 font-bold">{row.departmentName}</td>
+                          <td className="px-gutter py-4 text-center font-label-mono">{row.totalAssetsCount}</td>
+                          <td className="px-gutter py-4 text-center font-label-mono">{row.directAllocationsCount}</td>
+                          <td className="px-gutter py-4 text-center font-label-mono">{row.employeeAllocationsCount}</td>
+                          <td className="px-gutter py-4 text-center font-label-mono font-bold text-primary">{row.totalActiveAllocations}</td>
+                          <td className="px-gutter py-4 text-right font-label-mono font-bold text-sm">
+                            ${row.totalAssetValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 5: Booking Heatmap */}
+          {activeReportTab === "heatmap" && (
+            <div className="space-y-6">
+              {/* Category split */}
+              <div className="bg-white border border-border-hairline p-6">
+                <div className="font-label-mono text-xs uppercase tracking-wider text-secondary font-bold pb-2 border-b border-border-hairline mb-4">
+                  Reservations Count by Resource Class
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-2">
+                  {Object.keys(heatmapData.byCategory).length === 0 ? (
+                    <p className="text-secondary text-xs italic col-span-4 text-center">No bookings logged yet.</p>
+                  ) : (
+                    Object.entries(heatmapData.byCategory).map(([catName, count]) => (
+                      <div key={catName} className="p-4 border border-border-hairline text-center">
+                        <span className="font-label-mono text-2xl font-bold block text-primary mb-1">{count}</span>
+                        <span className="text-[10px] font-label-mono text-secondary uppercase font-semibold">{catName}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Heatmap Grid */}
+              <div className="bg-white border border-border-hairline p-6">
+                <div className="font-label-mono text-xs uppercase tracking-wider text-secondary font-bold pb-2 border-b border-border-hairline mb-6 flex justify-between items-center">
+                  <span>Weekly Booking Density Heatmap (Day of Week vs Hour of Day)</span>
+                  <div className="flex gap-2 items-center text-[9px] font-label-mono font-bold text-secondary">
+                    <span>Low</span>
+                    <span className="w-3 h-3 bg-surface-container-low border border-border-hairline"></span>
+                    <span className="w-3 h-3 bg-primary/20"></span>
+                    <span className="w-3 h-3 bg-primary/45"></span>
+                    <span className="w-3 h-3 bg-primary/70"></span>
+                    <span className="w-3 h-3 bg-primary"></span>
+                    <span>High</span>
+                  </div>
+                </div>
+                
+                <div className="overflow-x-auto custom-scrollbar">
+                  <div className="min-w-[800px] space-y-1">
+                    {/* Hours row labels */}
+                    <div className="grid gap-1 mb-2" style={{ gridTemplateColumns: 'repeat(25, minmax(0, 1fr))' }}>
+                      <div className="col-span-1 text-[9px] font-label-mono text-secondary font-semibold">Day</div>
+                      {Array.from({ length: 24 }).map((_, hour) => (
+                        <div key={hour} className="text-center text-[9px] font-label-mono text-secondary font-semibold">
+                          {hour.toString().padStart(2, "0")}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Day Rows */}
+                    {daysOfWeek.map((dayName, dayIdx) => (
+                      <div key={dayIdx} className="grid gap-1 items-center" style={{ gridTemplateColumns: 'repeat(25, minmax(0, 1fr))' }}>
+                        <div className="col-span-1 text-[11px] font-label-mono text-secondary font-bold">{dayName}</div>
+                        {Array.from({ length: 24 }).map((_, hourIdx) => {
+                          const cell = heatmapData.heatmap.find(c => c.dayOfWeek === dayIdx && c.hourOfDay === hourIdx);
+                          const count = cell ? cell.count : 0;
+                          return (
+                            <div 
+                              key={hourIdx} 
+                              className={`h-7 rounded-sm border border-border-hairline/25 ${getHeatmapColor(count)} flex items-center justify-center text-[9px] font-label-mono font-bold text-transparent hover:text-on-surface-variant transition-all`}
+                              title={`${dayName} at ${hourIdx.toString().padStart(2, "0")}:00 - ${count} Booking(s)`}
+                            >
+                              {count > 0 ? count : ""}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <footer className="mt-section-margin w-full py-gutter border-t border-border-hairline px-0 grid grid-cols-1 md:grid-cols-2 gap-gutter text-xs bg-background">
-          <div>
-            <p className="font-label-mono text-label-mono text-secondary uppercase opacity-60">
-              © 2024 AssetFlow Systems. All rights reserved.
+        <footer className="mt-12 pt-12 border-t border-border-hairline flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-12">
+          <div className="space-y-1">
+            <div className="font-section-number text-[18px] text-on-surface font-semibold">
+              AssetFlow
+            </div>
+            <p className="font-label-mono text-[11px] text-secondary uppercase tracking-widest">
+              © 2026 AssetFlow Systems. All rights reserved.
             </p>
           </div>
-          <div className="flex md:justify-end gap-6">
-            <Link className="font-label-mono text-label-mono text-secondary hover:text-primary transition-opacity duration-300 uppercase underline" href="#">
+          <div className="flex gap-8 text-xs">
+            <Link className="font-label-mono text-[11px] text-secondary uppercase tracking-widest hover:text-primary transition-colors" href="#">
               Privacy
             </Link>
-            <Link className="font-label-mono text-label-mono text-secondary hover:text-primary transition-opacity duration-300 uppercase underline" href="#">
+            <Link className="font-label-mono text-[11px] text-secondary uppercase tracking-widest hover:text-primary transition-colors" href="#">
               Terms
             </Link>
-            <Link className="font-label-mono text-label-mono text-secondary hover:text-primary transition-opacity duration-300 uppercase underline" href="#">
+            <Link className="font-label-mono text-[11px] text-secondary uppercase tracking-widest hover:text-primary transition-colors" href="#">
               Security
             </Link>
-            <Link className="font-label-mono text-label-mono text-secondary hover:text-primary transition-opacity duration-300 uppercase underline" href="#">
+            <Link className="font-label-mono text-[11px] text-secondary uppercase tracking-widest hover:text-primary transition-colors" href="#">
               System Status
             </Link>
           </div>
